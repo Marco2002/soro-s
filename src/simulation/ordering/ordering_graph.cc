@@ -67,28 +67,28 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 ordering_graph::ordering_graph(infra::infrastructure const& infra,
                                tt::timetable const& tt, filter const& filter) {
   utl::scoped_timer const timer("creating ordering graph");
-
-  std::for_each(tt->trains_.begin(), tt->trains_.end(), [&](auto train) {
-    train.
-  });
-
-
-  // old code ========================================================================
-  ordering_node::id glob_current_node_id = 0;
-  std::vector<std::vector<route_usage>> orderings(
+  std::vector<std::vector<route_usage>> exclusion_sets(
       infra->exclusion_.exclusion_sets_.size());
 
-  auto const insert_into_orderings = [&](route_usage const& usage,
+  auto const insert_into_exclusion_set = [&](route_usage const& usage,
                                          interlocking_route::id const ir_id) {
     for (auto const es_id : infra->exclusion_.irs_to_exclusion_sets_[ir_id]) {
-      orderings[es_id].push_back(usage);
+      exclusion_sets[es_id].push_back(usage);
     }
   };
 
-  auto const generate_route_orderings = [&](train const& train) {
+  ordering_node::id glob_current_node_id = 0;
+
+  // populate exclusion_sets and nodes with primitive edges
+  for (auto const &train : tt->trains_) {
+    if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
+      continue;
+    }
+
     soro::vector<timestamp> times;
 
     for (auto const anchor : train.departures(filter.interval_)) {
+
       if (times.empty()) {
         times = runtime_calculation(train, infra, {type::MAIN_SIGNAL}).times_;
 
@@ -110,35 +110,33 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
       }
 
       ordering_node::id curr_node_id = ordering_node::INVALID;
-      {
-        curr_node_id = glob_current_node_id;
-        glob_current_node_id += train.path_.size();
-        nodes_.resize(nodes_.size() + train.path_.size());
-        // QUESTION: trip to nodes only stores the departure and final destination nodes?
-        trip_to_nodes_.emplace(
-            train::trip{.train_id_ = train.id_, .anchor_ = anchor},
-            std::pair{curr_node_id, static_cast<ordering_node::id>(
-                                        curr_node_id + train.path_.size())});
-      }
 
-      {  // add first halt -> first main signal
-        nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
-                                             .ir_id_ = train.path_.front(),
-                                             .train_id_ = train.id_,
-                                             .in_ = {},
-                                             .out_ = {curr_node_id + 1}};
+      curr_node_id = glob_current_node_id;
+      glob_current_node_id += train.path_.size();
+      nodes_.resize(nodes_.size() + train.path_.size());
 
-        route_usage const first_usage = {
-            .from_ = relative_to_absolute(anchor, train.first_departure()),
-            .to_ = relative_to_absolute(anchor, times.front().arrival_),
-            .id_ = curr_node_id};
+      // add train trip to trip_to_nodes_
+      trip_to_nodes_.emplace(
+          train::trip{.train_id_ = train.id_, .anchor_ = anchor},
+          std::pair{curr_node_id, static_cast<ordering_node::id>(
+                                      curr_node_id + train.path_.size())});
 
-        insert_into_orderings(first_usage, nodes_[curr_node_id].ir_id_);
+      // add first halt -> first main signal
+      nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
+                                           .ir_id_ = train.path_.front(),
+                                           .train_id_ = train.id_,
+                                           .in_ = {},
+                                           .out_ = {curr_node_id + 1}};
 
-        ++curr_node_id;
-      }
+      route_usage const first_usage = {
+          .from_ = relative_to_absolute(anchor, train.first_departure()),
+          .to_ = relative_to_absolute(anchor, times.front().arrival_),
+          .id_ = curr_node_id};
 
-      // ASSUMPTION: the nodes_ vector is being filled with the nodes of each train trip in the order of the train trip, so that all nodes of a train trip are together
+      insert_into_exclusion_set(first_usage, nodes_[curr_node_id].ir_id_);
+      ++curr_node_id;
+
+      // add trip route_usages
       auto path_idx = 1U;
       for (auto const [from_time, to_time] : utl::pairwise(times)) {
         nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
@@ -152,70 +150,79 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
             .to_ = relative_to_absolute(anchor, from_time.departure_),
             .id_ = curr_node_id};
 
-        insert_into_orderings(usage, nodes_[curr_node_id].ir_id_);
+        insert_into_exclusion_set(usage, nodes_[curr_node_id].ir_id_);
 
         ++path_idx;
         ++curr_node_id;
       }
 
-      {  // add last ms -> last halt
-        nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
-                                             .ir_id_ = train.path_.back(),
-                                             .train_id_ = train.id_,
-                                             .in_ = {curr_node_id - 1},
-                                             .out_ = {}};
+      // add last main signal -> last halt
+      nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
+                                           .ir_id_ = train.path_.back(),
+                                           .train_id_ = train.id_,
+                                           .in_ = {curr_node_id - 1},
+                                           .out_ = {}};
 
-        route_usage const last_usage = {
-            .from_ = relative_to_absolute(anchor, times.back().arrival_),
-            .to_ = relative_to_absolute(anchor, train.last_arrival()),
-            .id_ = curr_node_id};
+      route_usage const last_usage = {
+          .from_ = relative_to_absolute(anchor, times.back().arrival_),
+          .to_ = relative_to_absolute(anchor, train.last_arrival()),
+          .id_ = curr_node_id};
 
-        insert_into_orderings(last_usage, nodes_[curr_node_id].ir_id_);
+      insert_into_exclusion_set(last_usage, nodes_[curr_node_id].ir_id_);
+      ++curr_node_id;
 
-        ++curr_node_id;
-      }
       utls::sassert(path_idx == train.path_.size() - 1);
     }
-  };
+  }
 
-  // generate the nodes and route usage orderings (1 node == 1 usage)
-  for (auto const& train : tt->trains_) {
+  for(auto const& train : tt->trains_) {
     if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
       continue;
     }
+    for (auto const anchor : train.departures(filter.interval_)) {
+      auto trip = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
+      vector<ordering_node::id> handled_exclusions = {};
 
-    generate_route_orderings(train);
-  }
+      for(auto i = trip.second; i > trip.first; --i) {
+        auto node_id = i-1;
+        auto ir_id = nodes_[node_id].ir_id_;
+        auto affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
 
-  // sort the orderings of each exclusion set by the from_ timestamp
-  utl::parallel_for(orderings, [](auto&& usage_order) {
-    utls::sort(usage_order, [](auto&& usage1, auto&& usage2) {
-      return usage1.from_ < usage2.from_;
-    });
-  });
+        for(auto const affected_exclusion_set : affected_exclusion_sets) {
+          soro::absolute_time self_time;
+          for(auto const other : exclusion_sets[affected_exclusion_set]) {
 
-  // QUESTION: How are edges to multiple nodes added if the edges are just added between adjacent nodes in the order?
+            if(other.id_ == node_id || utls::contains(handled_exclusions, other.id_)) {
+              self_time = other.from_;
+            }
+          }
 
-  // create edges according to the sorted orderings
-  for (auto const& usage_order : orderings) {
-    for (auto [from, to] : utl::pairwise(usage_order)) {
-      // if the .from timestamps for the orderings are equal then we are just
-      // betting that we don't introduce a cycle into the ordering graph
-      //      utls::sassert(from.from_ != to.from_, "from and to are equal");
+          for(auto const other : exclusion_sets[affected_exclusion_set]) {
 
-      nodes_[from.id_].out_.emplace_back(to.id_);
-      nodes_[to.id_].in_.emplace_back(from.id_);
+            if(other.id_ == node_id || utls::contains(handled_exclusions, other.id_)) {
+              continue;
+            }
+
+            if(other.from_ > self_time) {
+              nodes_[node_id].out_.emplace_back(other.id_);
+              nodes_[other.id_].in_.emplace_back(node_id);
+            } else {
+              nodes_[other.id_].out_.emplace_back(node_id);
+              nodes_[node_id].in_.emplace_back(other.id_);
+            }
+          }
+        }
+      }
     }
   }
 
-  for (auto& node : nodes_) {
-    utl::erase_duplicates(node.out_);
-    utl::erase_duplicates(node.in_);
-  }
-
-  // Replace with new algorithm
-  remove_transitive_edges(*this);
-
+//  for (auto& node : nodes_) {
+//    utl::erase_duplicates(node.out_);
+//    utl::erase_duplicates(node.in_);
+//  }
+//
+//  // Replace with new algorithm
+//  remove_transitive_edges(*this);
   print_ordering_graph_stats(*this);
 }
 
