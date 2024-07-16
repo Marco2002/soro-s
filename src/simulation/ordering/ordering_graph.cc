@@ -68,8 +68,13 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
                                tt::timetable const& tt, filter const& filter) {
   utl::scoped_timer const timer("creating ordering graph");
 
-  ordering_node::id glob_current_node_id = 0;
+  std::for_each(tt->trains_.begin(), tt->trains_.end(), [&](auto train) {
+    train.
+  });
 
+
+  // old code ========================================================================
+  ordering_node::id glob_current_node_id = 0;
   std::vector<std::vector<route_usage>> orderings(
       infra->exclusion_.exclusion_sets_.size());
 
@@ -109,13 +114,14 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
         curr_node_id = glob_current_node_id;
         glob_current_node_id += train.path_.size();
         nodes_.resize(nodes_.size() + train.path_.size());
+        // QUESTION: trip to nodes only stores the departure and final destination nodes?
         trip_to_nodes_.emplace(
             train::trip{.train_id_ = train.id_, .anchor_ = anchor},
             std::pair{curr_node_id, static_cast<ordering_node::id>(
                                         curr_node_id + train.path_.size())});
       }
 
-      {  // add first halt -> first ms
+      {  // add first halt -> first main signal
         nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
                                              .ir_id_ = train.path_.front(),
                                              .train_id_ = train.id_,
@@ -132,6 +138,7 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
         ++curr_node_id;
       }
 
+      // ASSUMPTION: the nodes_ vector is being filled with the nodes of each train trip in the order of the train trip, so that all nodes of a train trip are together
       auto path_idx = 1U;
       for (auto const [from_time, to_time] : utl::pairwise(times)) {
         nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
@@ -180,11 +187,14 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     generate_route_orderings(train);
   }
 
+  // sort the orderings of each exclusion set by the from_ timestamp
   utl::parallel_for(orderings, [](auto&& usage_order) {
     utls::sort(usage_order, [](auto&& usage1, auto&& usage2) {
       return usage1.from_ < usage2.from_;
     });
   });
+
+  // QUESTION: How are edges to multiple nodes added if the edges are just added between adjacent nodes in the order?
 
   // create edges according to the sorted orderings
   for (auto const& usage_order : orderings) {
@@ -203,6 +213,7 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     utl::erase_duplicates(node.in_);
   }
 
+  // Replace with new algorithm
   remove_transitive_edges(*this);
 
   print_ordering_graph_stats(*this);
