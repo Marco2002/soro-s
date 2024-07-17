@@ -180,24 +180,24 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
       continue;
     }
     for (auto const anchor : train.departures(filter.interval_)) {
-      auto trip = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
+      auto const& trip = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
       vector<ordering_node::id> handled_exclusions = {};
 
       for(auto i = trip.second; i > trip.first; --i) {
-        auto node_id = i-1;
-        auto ir_id = nodes_[node_id].ir_id_;
-        auto affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
+        auto const node_id = i-1;
+        auto const ir_id = nodes_[node_id].ir_id_;
+        auto const& affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
 
-        for(auto const affected_exclusion_set : affected_exclusion_sets) {
+        for(auto const& affected_exclusion_set : affected_exclusion_sets) {
           soro::absolute_time self_time;
           for(auto const other : exclusion_sets[affected_exclusion_set]) {
 
-            if(other.id_ == node_id || utls::contains(handled_exclusions, other.id_)) {
+            if(other.id_ == node_id) {
               self_time = other.from_;
             }
           }
 
-          for(auto const other : exclusion_sets[affected_exclusion_set]) {
+          for(auto const& other : exclusion_sets[affected_exclusion_set]) {
 
             if(other.id_ == node_id || utls::contains(handled_exclusions, other.id_)) {
               continue;

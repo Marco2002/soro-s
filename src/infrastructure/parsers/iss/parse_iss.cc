@@ -945,7 +945,7 @@ void complete_borders(infrastructure_t& iss) {
 
   // insert empty sections between two borders of neighbouring stations,
   // to make the section model consistent
-  soro::set<border::id_tuple> finished_borders;
+  std::set<border::id_tuple> finished_borders;
 
   for (auto const& station : iss.stations_) {
     for (auto const& border : station->borders_) {
