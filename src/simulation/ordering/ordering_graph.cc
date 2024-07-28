@@ -71,7 +71,7 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
       infra->exclusion_.exclusion_sets_.size());
 
   auto const insert_into_exclusion_set = [&](route_usage const& usage,
-                                         interlocking_route::id const ir_id) {
+                                             interlocking_route::id const ir_id) {
     for (auto const es_id : infra->exclusion_.irs_to_exclusion_sets_[ir_id]) {
       exclusion_sets[es_id].push_back(usage);
     }
@@ -181,48 +181,69 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     }
     for (auto const anchor : train.departures(filter.interval_)) {
       auto const& trip = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
-      vector<ordering_node::id> handled_exclusions = {};
+      std::unordered_map<ordering_node::id, bool> handled_exclusions = {};
 
       for(auto i = trip.second; i > trip.first; --i) {
         auto const node_id = i-1;
         auto const ir_id = nodes_[node_id].ir_id_;
         auto const& affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
+        std::unordered_map<ordering_node::id, std::pair<std::size_t, std::size_t>> added_arcs = {};
 
         for(auto const& affected_exclusion_set : affected_exclusion_sets) {
           soro::absolute_time self_time;
           for(auto const other : exclusion_sets[affected_exclusion_set]) {
 
-            if(other.id_ == node_id) {
+            if(other.id_ == node_id || handled_exclusions.find(other.id_) != handled_exclusions.end()) {
               self_time = other.from_;
             }
           }
 
           for(auto const& other : exclusion_sets[affected_exclusion_set]) {
 
-            if(other.id_ == node_id || utls::contains(handled_exclusions, other.id_)) {
+            if(other.id_ == node_id || handled_exclusions.find(other.id_) != handled_exclusions.end() || other.from_ < self_time) {
               continue;
             }
 
-            if(other.from_ > self_time) {
-              nodes_[node_id].out_.emplace_back(other.id_);
-              nodes_[other.id_].in_.emplace_back(node_id);
-            } else {
-              nodes_[other.id_].out_.emplace_back(node_id);
-              nodes_[node_id].in_.emplace_back(other.id_);
+            // do a dfs on the other node and add all reachable nodes to the handled_exclusions
+            std::stack<ordering_node::id> stack;
+            stack.push(other.id_);
+
+            while (!stack.empty()) {
+              auto v = stack.top();
+              stack.pop();
+
+              if(handled_exclusions.find(v) != handled_exclusions.end()) {
+                if(added_arcs.find(v) != added_arcs.end()) {
+                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first);
+                  nodes_[v].in_.erase(nodes_[v].in_.begin() + added_arcs[v].second);
+                }
+              } else {
+                handled_exclusions[v] = true;
+                // Visit all adjacent vertices
+                for (auto i : nodes_[v].out_) {
+                  if (handled_exclusions.find(i) == handled_exclusions.end()) {
+                    stack.push(i);
+                  }
+                }
+              }
             }
+
+            added_arcs[other.id_] = { nodes_[node_id].out_.size(), nodes_[other.id_].in_.size() };
+            nodes_[node_id].out_.emplace_back(other.id_);
+            nodes_[other.id_].in_.emplace_back(node_id);
           }
         }
       }
     }
   }
 
-//  for (auto& node : nodes_) {
-//    utl::erase_duplicates(node.out_);
-//    utl::erase_duplicates(node.in_);
-//  }
-//
-//  // Replace with new algorithm
-//  remove_transitive_edges(*this);
+  //  for (auto& node : nodes_) {
+  //    utl::erase_duplicates(node.out_);
+  //    utl::erase_duplicates(node.in_);
+  //  }
+  //
+  //  // Replace with new algorithm
+  //  remove_transitive_edges(*this);
   print_ordering_graph_stats(*this);
 }
 

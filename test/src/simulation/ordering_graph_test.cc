@@ -9,11 +9,58 @@
 #include "soro/simulation/ordering/ordering_graph.h"
 
 #include "test/file_paths.h"
+#include <stack>
 
 namespace soro::simulation::test {
 
 using namespace soro::tt;
 using namespace soro::infra;
+
+void fill_by_dfs(ordering_graph const& og, ordering_node::id start_node, std::unordered_map<ordering_node::id, bool>& transiently_reachable_edges) {
+  vector<bool> visited(og.nodes_.size(), false);
+  std::stack<ordering_node::id> stack;
+  stack.push(start_node);
+
+  while (!stack.empty()) {
+    auto v = stack.top();
+    stack.pop();
+    if(v != start_node) {
+      transiently_reachable_edges[v] = true;
+    }
+
+    if (!visited[v]) {
+      visited[v] = true;
+    }
+
+    // Visit all adjacent vertices
+    for (auto i : og.nodes_[v].out_) {
+      if (!visited[i]) {
+        stack.push(i);
+      }
+    }
+  }
+}
+
+void check_no_transient_edges(ordering_graph const& og) {
+  // find all transiently reachable nodes y that are reachable from node x but not directly connected
+  std::unordered_map<ordering_node::id, std::unordered_map<ordering_node::id, bool>> transiently_reachable_edges_of_node(og.nodes_.size());
+  for(auto const& node : og.nodes_) {
+    for(auto const out_id : node.out_) {
+      fill_by_dfs(og, out_id, transiently_reachable_edges_of_node[node.id_]);
+    }
+  }
+
+  // check that no transiently reachable node is directly connected (unless its direct following edge)
+  for(auto const& node : og.nodes_) {
+    for(auto const out_id : node.out_) {
+      for(auto const reachable_node : transiently_reachable_edges_of_node[out_id]) {
+        if(reachable_node.first != node.id_+1) {
+          CHECK(!utls::contains(node.out_, reachable_node.first));
+        }
+      }
+    }
+  }
+}
 
 void check_ordering_graph(ordering_graph const& og,
                           infrastructure const& infra) {
@@ -81,6 +128,9 @@ TEST_SUITE("ordering graph") {
       CHECK(utls::contains(from.out_, to.id_));
       CHECK(utls::contains(to.in_, from.id_));
     }
+
+    // check no transient edges
+    check_no_transient_edges(og);
   }
 
   TEST_CASE("ordering graph, cross") {
@@ -97,6 +147,7 @@ TEST_SUITE("ordering graph") {
     ordering_graph const og(infra, tt);
 
     check_ordering_graph(og, infra);
+    check_no_transient_edges(og);
   }
 
   TEST_CASE("de_kss graph" * doctest::skip(true)) {
