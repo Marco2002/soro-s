@@ -237,13 +237,13 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     }
   }
 
-  //  for (auto& node : nodes_) {
-  //    utl::erase_duplicates(node.out_);
-  //    utl::erase_duplicates(node.in_);
-  //  }
-  //
-  //  // Replace with new algorithm
-  //  remove_transitive_edges(*this);
+//  for (auto& node : nodes_) {
+//    utl::erase_duplicates(node.out_);
+//    utl::erase_duplicates(node.in_);
+//  }
+//
+//  // Replace with new algorithm
+//  remove_transitive_edges(*this);
   print_ordering_graph_stats(*this);
 }
 

@@ -160,7 +160,7 @@ TEST_SUITE("ordering graph") {
     opts.layout_ = false;
 
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                         .end_ = rep_to_absolute_time(1636786800) + hours{2}};
+                         .end_ = rep_to_absolute_time(1636786800) + hours{1}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);
