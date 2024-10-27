@@ -175,15 +175,14 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     }
   }
 
-  for(auto const& train : tt->trains_) {
-    if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
-      continue;
-    }
+  for(auto i = 0; i < (filter.trains_.empty() ? tt->trains_.size() : filter.trains_.size()); ++i) {
+    auto const train = filter.trains_.empty() ? tt->trains_[i] : tt->trains_[filter.trains_[i]];
     for (auto const anchor : train.departures(filter.interval_)) {
-      auto const& trip = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
-      std::unordered_map<ordering_node::id, bool> handled_exclusions = {};
+      auto const& [first, second] = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
+      // std::unordered_map<ordering_node::id, bool> handled_exclusions = {};
+      std::vector<bool> handled_exclusions(nodes_.size(), false);
 
-      for(auto i = trip.second; i > trip.first; --i) {
+      for(auto i = second; i > first; --i) { // loop backwards though train trip
         auto const node_id = i-1;
         auto const ir_id = nodes_[node_id].ir_id_;
         auto const& affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
@@ -191,16 +190,16 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 
         for(auto const& affected_exclusion_set : affected_exclusion_sets) {
           soro::absolute_time self_time;
-          for(auto const other : exclusion_sets[affected_exclusion_set]) {
+          for(auto const& [from_, to_, id_] : exclusion_sets[affected_exclusion_set]) {
 
-            if(other.id_ == node_id || handled_exclusions.find(other.id_) != handled_exclusions.end()) {
-              self_time = other.from_;
+            if(id_ == node_id) {
+              self_time = from_;
             }
           }
 
           for(auto const& other : exclusion_sets[affected_exclusion_set]) {
 
-            if(other.id_ == node_id || handled_exclusions.find(other.id_) != handled_exclusions.end() || other.from_ < self_time) {
+            if(other.id_ == node_id || other.from_ < self_time || handled_exclusions[other.id_]) {
               continue;
             }
 
@@ -212,16 +211,16 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
               auto v = stack.top();
               stack.pop();
 
-              if(handled_exclusions.find(v) != handled_exclusions.end()) {
+              if(handled_exclusions[v]) {
                 if(added_arcs.find(v) != added_arcs.end()) {
-                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first);
+                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first); // TODO check if this is necessary
                   nodes_[v].in_.erase(nodes_[v].in_.begin() + added_arcs[v].second);
                 }
               } else {
                 handled_exclusions[v] = true;
                 // Visit all adjacent vertices
                 for (auto i : nodes_[v].out_) {
-                  if (handled_exclusions.find(i) == handled_exclusions.end()) {
+                  if (!handled_exclusions[i]) {
                     stack.push(i);
                   }
                 }

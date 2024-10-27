@@ -42,7 +42,7 @@ void fill_by_dfs(ordering_graph const& og, ordering_node::id start_node, std::un
 }
 
 void check_no_transient_edges(ordering_graph const& og) {
-  // find all transiently reachable nodes y that are reachable from node x but not directly connected
+  // find all transiently reachable nodes that are reachable from node x but not directly connected
   std::unordered_map<ordering_node::id, std::unordered_map<ordering_node::id, bool>> transiently_reachable_edges_of_node(og.nodes_.size());
   for(auto const& node : og.nodes_) {
     for(auto const out_id : node.out_) {
