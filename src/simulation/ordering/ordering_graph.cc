@@ -175,7 +175,7 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     }
   }
 
-  for(auto i = 0; i < (filter.trains_.empty() ? tt->trains_.size() : filter.trains_.size()); ++i) {
+  for(size_t i = 0; i < (filter.trains_.empty() ? tt->trains_.size() : filter.trains_.size()); ++i) {
     auto const train = filter.trains_.empty() ? tt->trains_[i] : tt->trains_[filter.trains_[i]];
     for (auto const anchor : train.departures(filter.interval_)) {
       auto const& [first, second] = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
