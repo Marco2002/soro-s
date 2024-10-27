@@ -26,7 +26,7 @@ inline void graph_traversal(Node const start, GetNeighbours&& get_neighbours,
   };
 
   Todo q;
-  cista::raw::hash_set<Node> seen;
+  std::set<Node> seen;
 
   q.emplace(std::pair{start, start});
 
