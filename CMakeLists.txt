@@ -29,7 +29,11 @@ if(SORO_SAN)
   SET(SORO_COMPILE_DEFINITIONS SORO_SAN ${SORO_COMPILE_DEFINITIONS})
   SET(SORO_LINK_STATIC "")
 else()
-  SET(SORO_LINK_STATIC "-static")
+  if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    SET(SORO_LINK_STATIC "-static")
+  else()
+    SET(SORO_LINK_STATIC "")
+  endif()
 endif()
 
 if(SORO_LINT)
@@ -91,6 +95,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     -Wno-c99-designator
     -Wno-zero-as-null-pointer-constant
     -Wno-missing-noreturn
+    -Wno-implicit-int-float-conversion
     -Wno-deprecated-experimental-coroutine
     -Werror
     -fcoroutines-ts
