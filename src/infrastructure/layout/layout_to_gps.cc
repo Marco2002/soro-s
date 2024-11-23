@@ -77,8 +77,7 @@ gps interpolate_coordinates(station::ptr station,
     auto const borders = station->borders_ | views::transform([](auto&& b) {
                            return b.neighbour_;
                          });
-    auto const neigh2 = neigh;
-    auto const is_neigh = [&](auto&& n) { return n == neigh2; };
+    auto const is_neigh = [&](auto&& n) { return n == neigh; };
     auto const coupling = count_if(borders, is_neigh);
 
     // TODO(julian) maybe use the coupling as a factor here

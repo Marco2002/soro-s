@@ -29,7 +29,7 @@ if(SORO_SAN)
   SET(SORO_COMPILE_DEFINITIONS SORO_SAN ${SORO_COMPILE_DEFINITIONS})
   SET(SORO_LINK_STATIC "")
 else()
-  SET(SORO_LINK_STATIC)
+  SET(SORO_LINK_STATIC "-static")
 endif()
 
 if(SORO_LINT)
@@ -51,7 +51,7 @@ if(SORO_CUDA)
   if(MSVC)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${SORO_CUDA_ARCH} -lcudadevrt")
   else()
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${SORO_CUDA_ARCH} --compiler-options")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${SORO_CUDA_ARCH} --compiler-options -static")
   endif()
   enable_language(CUDA)
 endif()
@@ -93,6 +93,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     -Wno-missing-noreturn
     -Wno-deprecated-experimental-coroutine
     -Werror
+    -fcoroutines-ts
     -fexperimental-library
     ${SORO_LINK_STATIC}
     )
@@ -120,6 +121,8 @@ else()
     -Wall
     -Wextra
     -Werror
+    -fcoroutines
+    -fconcepts-diagnostics-depth=10
     ${SORO_LINK_STATIC}
     )
 endif()
