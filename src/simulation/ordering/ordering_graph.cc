@@ -175,8 +175,10 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     }
   }
 
-  for(size_t i = 0; i < (filter.trains_.empty() ? tt->trains_.size() : filter.trains_.size()); ++i) {
-    auto const train = filter.trains_.empty() ? tt->trains_[i] : tt->trains_[filter.trains_[i]];
+  for (auto const &train : tt->trains_) {
+    if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
+      continue;
+    }
     for (auto const anchor : train.departures(filter.interval_)) {
       auto const& [first, second] = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
       // std::unordered_map<ordering_node::id, bool> handled_exclusions = {};
@@ -213,15 +215,15 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 
               if(handled_exclusions[v]) {
                 if(added_arcs.find(v) != added_arcs.end()) {
-                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first); // TODO check if this is necessary
-                  nodes_[v].in_.erase(nodes_[v].in_.begin() + added_arcs[v].second);
+//                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first); // TODO check if this is necessary
+//                  nodes_[v].in_.erase(nodes_[v].in_.begin() + added_arcs[v].second);
                 }
               } else {
                 handled_exclusions[v] = true;
                 // Visit all adjacent vertices
-                for (auto i : nodes_[v].out_) {
-                  if (!handled_exclusions[i]) {
-                    stack.push(i);
+                for (auto j : nodes_[v].out_) {
+                  if (!handled_exclusions[j]) {
+                    stack.push(j);
                   }
                 }
               }

@@ -17,11 +17,11 @@ enum class type : type_id {
   BORDER,
   LINE_SWITCH,
   // simple switch
-  SIMPLE_SWITCH,
+  SIMPLE_SWITCH, // weiche
   // cross
-  CROSS,
+  CROSS, // kreuzung
   // directed track elements
-  MAIN_SIGNAL,
+  MAIN_SIGNAL, // marks end and start of interlocking route
   PROTECTION_SIGNAL,
   APPROACH_SIGNAL,
   RUNTIME_CHECKPOINT,
