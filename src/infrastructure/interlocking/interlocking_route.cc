@@ -251,4 +251,26 @@ utls::generator<sub_path> interlocking_route::iterate_station_routes(
   }
 }
 
+section::ids interlocking_route::get_used_sections(infrastructure const& infra) const {
+  section::ids used_sections;
+  for (auto const& rn : iterate(infra)) {
+    auto const& element = rn.node_->element_;
+    if (!element->is_track_element()) {
+      continue;
+    }
+
+    auto const& sec_ids =
+        infra->graph_.element_id_to_section_ids_[element->id()];
+    utls::sassert(sec_ids.size() == 1,
+                  "track element with more than one section?");
+    auto const section_id = sec_ids.front();
+
+    if (used_sections.empty() || used_sections.back() != section_id) {
+      used_sections.emplace_back(section_id);
+    }
+  }
+
+  return used_sections;
+}
+
 }  // namespace soro::infra

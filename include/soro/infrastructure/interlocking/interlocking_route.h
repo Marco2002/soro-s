@@ -73,6 +73,8 @@ struct interlocking_route {
   utls::generator<sub_path> iterate_station_routes(
       infrastructure_t const&) const;
 
+  section::ids get_used_sections(infrastructure const& infra) const;
+
   id id_{INVALID};
 
   // defines the path of the interlocking route

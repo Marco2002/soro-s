@@ -46,29 +46,6 @@ element::ids get_exclusion_elements_from_to(section const& section,
   return filter_transform_collect(section.from_to(from, to, dir));
 }
 
-section::ids get_used_sections(interlocking_route const& ir,
-                               infrastructure const& infra) {
-  section::ids used_sections;
-  for (auto const& rn : ir.iterate(infra)) {
-    auto const& element = rn.node_->element_;
-    if (!element->is_track_element()) {
-      continue;
-    }
-
-    auto const& sec_ids =
-        infra->graph_.element_id_to_section_ids_[element->id()];
-    utls::sassert(sec_ids.size() == 1,
-                  "track element with more than one section?");
-    auto const section_id = sec_ids.front();
-
-    if (used_sections.empty() || used_sections.back() != section_id) {
-      used_sections.emplace_back(section_id);
-    }
-  }
-
-  return used_sections;
-}
-
 element::ids get_exclusion_elements_one_section(interlocking_route const& ir,
                                                 section const& section,
                                                 infrastructure const& infra) {
@@ -98,8 +75,7 @@ element::ids get_exclusion_elements(interlocking_route const& ir,
   element::ids exclusion_elements;
 
   // second: gather all elements in the used sections
-
-  auto const used_sections = get_used_sections(ir, infra);
+  auto const used_sections = ir.get_used_sections(infra);
   utls::sassert(!used_sections.empty(), "no used sections found");
 
   auto const& first_element = ir.first_node(infra)->element_;

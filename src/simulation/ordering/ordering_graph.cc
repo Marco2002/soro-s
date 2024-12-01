@@ -55,29 +55,116 @@ void print_ordering_graph_stats(ordering_graph const& og) {
 }
 
 struct route_usage {
-  soro::absolute_time from_{};
-  soro::absolute_time to_{};
+  soro::absolute_time timestamp_{}; // time where it is begin to used
   ordering_node::id id_{ordering_node::INVALID};
 };
+
+struct usage_data {
+  std::vector<std::vector<section::id>> used_sections;
+  std::vector<std::vector<route_usage*>> usages;
+  std::vector<soro::data::bitvec> reachability_data;
+
+  route_usage* find_next_usage(section::id const section, ordering_node::id const node_id) {
+    auto const& section_usages = usages[section];
+    for(size_t i = 0; i < section_usages.size()-1; ++i) {
+      if(section_usages[i]->id_ == node_id) {
+        return section_usages[i+1];
+      }
+    }
+    return nullptr;
+  }
+};
+
+void search_with_break(ordering_node::id node_id, soro::data::bitvec& handled_exclusions, ordering_node::id break_node,
+                       std::vector<ordering_node>& nodes, usage_data& usage_data) {
+  handled_exclusions.set(node_id, true);
+  auto const used_sections = usage_data.used_sections[node_id];
+  std::vector<route_usage*> next_usages;
+  for(auto const section : used_sections) {
+    auto next_usage = usage_data.find_next_usage(section, node_id);
+    if(next_usage != nullptr) {
+      next_usages.push_back(next_usage);
+    }
+  }
+
+
+
+  if(!next_usages.empty()) {
+    auto next_usage = (*(std::min_element(next_usages.begin(), next_usages.end(), [](auto const a, auto const b) {
+                        return a->timestamp_ < b->timestamp_;
+                      })))->id_;
+    if(!handled_exclusions[next_usage]) {
+      nodes[node_id].out_.push_back(next_usage);
+      nodes[next_usage].in_.push_back(node_id);
+
+      // search other node if not yet searched
+      if(usage_data.reachability_data[next_usage].none()) {
+        auto end_node = &nodes[next_usage];
+        while(!end_node->out_.empty()) end_node = &nodes[end_node->out_.front()];
+        soro::data::bitvec next_usage_exclusions;
+        next_usage_exclusions.resize(handled_exclusions.size());
+        search_with_break(end_node->id_, next_usage_exclusions, next_usage, nodes, usage_data);
+      }
+
+      auto other_exclusions = usage_data.reachability_data[next_usage];
+      handled_exclusions |= other_exclusions;
+    }
+  }
+
+  usage_data.reachability_data[node_id] = handled_exclusions;
+  if(node_id != break_node && !nodes[node_id].in_.empty()) {
+    search_with_break(nodes[node_id].in_.front(), handled_exclusions, break_node, nodes, usage_data);
+  }
+}
+
+void search(ordering_node::id const node_id, soro::data::bitvec& handled_exclusions,
+            std::vector<ordering_node>& nodes, usage_data& usage_data) {
+  search_with_break(node_id, handled_exclusions, ordering_node::INVALID, nodes, usage_data);
+}
+
+void start_search(ordering_node::id const node_id, std::vector<ordering_node>& nodes,
+                  usage_data& usage_data) {
+  soro::data::bitvec handled_exclusions;
+  // if the next node was already visited, then take its reachability data as handled exclusions
+  if(!nodes[node_id].out_.empty()) {
+    handled_exclusions = usage_data.reachability_data[nodes[node_id].out_.front()];
+  } else {
+    handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
+  }
+  search(node_id, handled_exclusions, nodes, usage_data);
+}
 
 ordering_graph::ordering_graph(infra::infrastructure const& infra,
                                tt::timetable const& tt)
     : ordering_graph(infra, tt, filter{}) {}
 
-ordering_graph::ordering_graph(infra::infrastructure const& infra,
-                               tt::timetable const& tt, filter const& filter) {
+ordering_graph::ordering_graph(const infra::infrastructure& infra,
+                               const tt::timetable& tt, const soro::simulation::ordering_graph::filter& filter) {
+  std::cout << "filtering trains: ";
   utl::scoped_timer const timer("creating ordering graph");
-  std::vector<std::vector<route_usage>> exclusion_sets(
-      infra->exclusion_.exclusion_sets_.size());
-
-  auto const insert_into_exclusion_set = [&](route_usage const& usage,
-                                             interlocking_route::id const ir_id) {
-    for (auto const es_id : infra->exclusion_.irs_to_exclusion_sets_[ir_id]) {
-      exclusion_sets[es_id].push_back(usage);
-    }
-  };
-
   ordering_node::id glob_current_node_id = 0;
+  size_t total_number_of_nodes = 0;
+
+  std::cout << "filtering trains: " << &infra;
+
+  for (auto const &train : tt->trains_) {
+    if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
+      continue;
+    }
+    for ([[maybe_unused]] auto const _ : train.departures(filter.interval_)) {
+      total_number_of_nodes += train.path_.size();
+    }
+  }
+
+  std::cout << "total number of nodes: " << total_number_of_nodes << std::endl;
+
+  std::vector<route_usage> route_usages(total_number_of_nodes);
+  nodes_.resize(total_number_of_nodes);
+  usage_data usage_data = {
+      .used_sections = std::vector<std::vector<section::id>>(total_number_of_nodes),
+      .usages = std::vector<std::vector<route_usage*>>(infra->graph_.sections_.size()),
+      .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
+  };
 
   // populate exclusion_sets and nodes with primitive edges
   for (auto const &train : tt->trains_) {
@@ -88,7 +175,6 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
     soro::vector<timestamp> times;
 
     for (auto const anchor : train.departures(filter.interval_)) {
-
       if (times.empty()) {
         times = runtime_calculation(train, infra, {type::MAIN_SIGNAL}).times_;
 
@@ -103,7 +189,6 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
               "main signals in running time calculation timestamps");
         });
       }
-
       if (times.empty()) {
         uLOG(utl::warn) << "no main signal in path of train " << train.id_;
         return;
@@ -113,7 +198,6 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 
       curr_node_id = glob_current_node_id;
       glob_current_node_id += train.path_.size();
-      nodes_.resize(nodes_.size() + train.path_.size());
 
       // add train trip to trip_to_nodes_
       trip_to_nodes_.emplace(
@@ -121,130 +205,49 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
           std::pair{curr_node_id, static_cast<ordering_node::id>(
                                       curr_node_id + train.path_.size())});
 
-      // add first halt -> first main signal
-      nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
-                                           .ir_id_ = train.path_.front(),
-                                           .train_id_ = train.id_,
-                                           .in_ = {},
-                                           .out_ = {curr_node_id + 1}};
-
-      route_usage const first_usage = {
-          .from_ = relative_to_absolute(anchor, train.first_departure()),
-          .to_ = relative_to_absolute(anchor, times.front().arrival_),
-          .id_ = curr_node_id};
-
-      insert_into_exclusion_set(first_usage, nodes_[curr_node_id].ir_id_);
-      ++curr_node_id;
-
-      // add trip route_usages
-      auto path_idx = 1U;
-      for (auto const [from_time, to_time] : utl::pairwise(times)) {
+      for(size_t i = 0; i < train.path_.size(); ++i) {
+        std::vector<node::id> in;
+        std::vector<node::id> out;
+        if(i > 0) in.push_back(curr_node_id - 1);
+        if(i < train.path_.size() - 1) out.push_back(curr_node_id + 1);
         nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
-                                             .ir_id_ = train.path_[path_idx],
+                                             .ir_id_ = train.path_[i],
                                              .train_id_ = train.id_,
-                                             .in_ = {curr_node_id - 1},
-                                             .out_ = {curr_node_id + 1}};
+                                             .in_ = in,
+                                             .out_ = out};
 
-        route_usage const usage = {
-            .from_ = relative_to_absolute(anchor, from_time.arrival_),
-            .to_ = relative_to_absolute(anchor, from_time.departure_),
-            .id_ = curr_node_id};
-
-        insert_into_exclusion_set(usage, nodes_[curr_node_id].ir_id_);
-
-        ++path_idx;
+        route_usages[curr_node_id] = {
+                .timestamp_ = relative_to_absolute(anchor, i == 0 ? train.first_departure() : times[i-1].departure_),
+                .id_ = curr_node_id};
         ++curr_node_id;
       }
+    }
+  }
+  // sort route_usages by from time
+  utls::sort(route_usages, [](auto const& a, auto const& b) {
+    return a.timestamp_ < b.timestamp_;
+  });
 
-      // add last main signal -> last halt
-      nodes_[curr_node_id] = ordering_node{.id_ = curr_node_id,
-                                           .ir_id_ = train.path_.back(),
-                                           .train_id_ = train.id_,
-                                           .in_ = {curr_node_id - 1},
-                                           .out_ = {}};
+  // populate used_sections and usages
+  for (auto& usage : route_usages) {
+    auto const& node = nodes_[usage.id_];
+    auto const& ir = infra->interlocking_.routes_[node.ir_id_];
+    auto sections = ir.get_used_sections(infra);
 
-      route_usage const last_usage = {
-          .from_ = relative_to_absolute(anchor, times.back().arrival_),
-          .to_ = relative_to_absolute(anchor, train.last_arrival()),
-          .id_ = curr_node_id};
-
-      insert_into_exclusion_set(last_usage, nodes_[curr_node_id].ir_id_);
-      ++curr_node_id;
-
-      utls::sassert(path_idx == train.path_.size() - 1);
+    for(auto section : sections) {
+      usage_data.used_sections[node.id_].emplace_back(section);
+      usage_data.usages[section].push_back(&usage);
     }
   }
 
-  for (auto const &train : tt->trains_) {
-    if (!filter.trains_.empty() && !utls::contains(filter.trains_, train.id_)) {
-      continue;
-    }
-    for (auto const anchor : train.departures(filter.interval_)) {
-      auto const& [first, second] = trip_to_nodes_[train::trip{.train_id_ = train.id_, .anchor_ = anchor}];
-      // std::unordered_map<ordering_node::id, bool> handled_exclusions = {};
-      std::vector<bool> handled_exclusions(nodes_.size(), false);
-
-      for(auto i = second; i > first; --i) { // loop backwards though train trip
-        auto const node_id = i-1;
-        auto const ir_id = nodes_[node_id].ir_id_;
-        auto const& affected_exclusion_sets = infra->exclusion_.irs_to_exclusion_sets_[ir_id];
-        std::unordered_map<ordering_node::id, std::pair<std::size_t, std::size_t>> added_arcs = {};
-
-        for(auto const& affected_exclusion_set : affected_exclusion_sets) {
-          soro::absolute_time self_time;
-          for(auto const& [from_, to_, id_] : exclusion_sets[affected_exclusion_set]) {
-
-            if(id_ == node_id) {
-              self_time = from_;
-            }
-          }
-
-          for(auto const& other : exclusion_sets[affected_exclusion_set]) {
-
-            if(other.id_ == node_id || other.from_ < self_time || handled_exclusions[other.id_]) {
-              continue;
-            }
-
-            // do a dfs on the other node and add all reachable nodes to the handled_exclusions
-            std::stack<ordering_node::id> stack;
-            stack.push(other.id_);
-
-            while (!stack.empty()) {
-              auto v = stack.top();
-              stack.pop();
-
-              if(handled_exclusions[v]) {
-                if(added_arcs.find(v) != added_arcs.end()) {
-//                  nodes_[node_id].out_.erase(nodes_[node_id].out_.begin() + added_arcs[v].first); // TODO check if this is necessary
-//                  nodes_[v].in_.erase(nodes_[v].in_.begin() + added_arcs[v].second);
-                }
-              } else {
-                handled_exclusions[v] = true;
-                // Visit all adjacent vertices
-                for (auto j : nodes_[v].out_) {
-                  if (!handled_exclusions[j]) {
-                    stack.push(j);
-                  }
-                }
-              }
-            }
-
-            added_arcs[other.id_] = { nodes_[node_id].out_.size(), nodes_[other.id_].in_.size() };
-            nodes_[node_id].out_.emplace_back(other.id_);
-            nodes_[other.id_].in_.emplace_back(node_id);
-          }
-        }
-      }
+  // start adding edges between train trips by searching backwards though ordering nodes
+  for(auto it = route_usages.rbegin(); it != route_usages.rend(); ++it) {
+    if(usage_data.reachability_data[it->id_].none()) {
+      start_search(it->id_, nodes_, usage_data);
     }
   }
 
-//  for (auto& node : nodes_) {
-//    utl::erase_duplicates(node.out_);
-//    utl::erase_duplicates(node.in_);
-//  }
-//
-//  // Replace with new algorithm
-//  remove_transitive_edges(*this);
+  std::cout << "num of nodes: " << total_number_of_nodes << std::endl;
   print_ordering_graph_stats(*this);
 }
 
