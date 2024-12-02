@@ -273,4 +273,95 @@ section::ids interlocking_route::get_used_sections(infrastructure const& infra) 
   return used_sections;
 }
 
+utls::recursive_generator<route_node> station_route_reverse(infrastructure const& infra, station_route::id station_route_id, node::idx const from, node::idx const to) {
+  utls::sassert(from < to, "From: {} is not smaller than to: {}.", from, to);
+
+  auto const sr = infra->station_routes_[station_route_id];
+
+  if (to >= sr->size()) {
+    co_return;
+  }
+
+  route_node result;
+  node::idx node_idx = to;
+
+  while (node_idx > from) {
+    --node_idx;
+    result.node_ = sr->nodes(node_idx);
+
+    co_yield result;
+  }
+}
+
+exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastructure const& infra) const {
+  section::ids used_sections = get_used_sections(infra);
+  exclusion_section::ids used_exclusion_sections;
+
+  // add first exclusion section and all the following ones that are part of the same section
+  auto first_element = first_node(infra)->element_;
+  if(!first_element->is_track_element()) {
+    // first element is either start or end of a section => add the whole section
+    auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
+    used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+  } else {
+    element_id first_non_tracking_element = std::find_if(iterate(infra).begin(), iterate(infra).end(), [](auto const& rn) {
+                                          return !rn.node_->element_->is_track_element();
+                                        })->node_->element_->id();
+    auto const& exclusions_by_first_section = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
+    // find first exclusion_section that contains first_element
+    long index_of_match = -1;
+    for(size_t i = 0; i < exclusions_by_first_section.size(); ++i) {
+      auto const& es = infra->exclusion_.exclusion_sections_[exclusions_by_first_section[i]];
+      if(es.contains_end(first_element->id())) {
+        index_of_match = static_cast<long>(i);
+        break;
+      }
+    }
+    utls::sassert(index_of_match != -1, "couldn't find first exclusion section that contains first non track element");
+    bool collect_left = infra->graph_.sections_[used_sections[0]].first_rising()->id() ==
+        first_non_tracking_element;
+    used_exclusion_sections.insert(used_exclusion_sections.end(),
+                                   collect_left ? exclusions_by_first_section.begin() : (exclusions_by_first_section.begin() + index_of_match + 1),
+                                   collect_left ? (exclusions_by_first_section.begin() + index_of_match + 1) : exclusions_by_first_section.end());
+  }
+
+  // add all the exclusion sections in between used_sections[1, -1]
+  for(soro::size_t i = 1; i < used_sections.size() - 1; ++i) {
+    auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections[i]];
+    used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+  }
+
+  // add last exclusion section and all the exclusion section that lead to it in the last section
+  auto last_element = last_node(infra)->element_;
+  if(!last_element->is_track_element()) {
+    // last element is either start or end of a section => add the whole section
+    auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.back()];
+    used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+  } else {
+    auto last_sr = station_routes_.back();
+    auto reverse_iterator = station_route_reverse(infra, last_sr, station_routes_.size() == 1 ? start_offset_ : 0, end_offset_);
+    element_id last_non_tracking_element = std::find_if(reverse_iterator.begin(), reverse_iterator.end(), [](auto const& rn) {
+                                          return !rn.node_->element_->is_track_element();
+                                        })->node_->element_->id();
+    auto const& exclusions_by_last_section = infra->exclusion_.section_to_exclusion_sections_[used_sections.back()];
+    // find first exclusion_section that contains last_element
+    long index_of_match = -1;
+    for(size_t i = 0; i < exclusions_by_last_section.size(); ++i) {
+      auto const& es = infra->exclusion_.exclusion_sections_[exclusions_by_last_section[i]];
+      if(es.contains_end(last_element->id())) {
+        index_of_match = static_cast<long>(i);
+        break;
+      }
+    }
+    utls::sassert(index_of_match != -1, "couldn't find last exclusion section that contains last non track element");
+    bool collect_left = infra->graph_.sections_[used_sections.back()].first_rising()->id() ==
+        last_non_tracking_element;
+    used_exclusion_sections.insert(used_exclusion_sections.end(),
+                                   collect_left ? exclusions_by_last_section.begin() : (exclusions_by_last_section.begin() + index_of_match + 1),
+                                   collect_left ? (exclusions_by_last_section.begin() + index_of_match + 1) : exclusions_by_last_section.end());
+  }
+
+  return used_exclusion_sections;
+}
+
 }  // namespace soro::infra

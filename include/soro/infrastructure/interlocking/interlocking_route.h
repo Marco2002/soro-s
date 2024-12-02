@@ -2,6 +2,7 @@
 
 #include "soro/utls/container/id_iterator.h"
 
+#include "soro/infrastructure/exclusion/exclusion_section.h"
 #include "soro/infrastructure/graph/type_set.h"
 #include "soro/infrastructure/station/station_route.h"
 #include "soro/rolling_stock/freight.h"
@@ -74,6 +75,7 @@ struct interlocking_route {
       infrastructure_t const&) const;
 
   section::ids get_used_sections(infrastructure const& infra) const;
+  exclusion_section::ids get_used_exclusion_sections(infrastructure const& infra) const;
 
   id id_{INVALID};
 

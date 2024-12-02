@@ -60,7 +60,7 @@ struct route_usage {
 };
 
 struct usage_data {
-  std::vector<std::vector<section::id>> used_sections;
+  std::vector<std::vector<exclusion_section::id>> used_sections;
   std::vector<std::vector<route_usage*>> usages;
   std::vector<soro::data::bitvec> reachability_data;
 
@@ -126,10 +126,10 @@ void start_search(ordering_node::id const node_id, std::vector<ordering_node>& n
                   usage_data& usage_data) {
   soro::data::bitvec handled_exclusions;
   // if the next node was already visited, then take its reachability data as handled exclusions
-  if(!nodes[node_id].out_.empty()) {
-    handled_exclusions = usage_data.reachability_data[nodes[node_id].out_.front()];
-  } else {
+  if(nodes[node_id].out_.empty()) {
     handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
+  } else {
+    handled_exclusions = usage_data.reachability_data[nodes[node_id].out_.front()];
   }
   search(node_id, handled_exclusions, nodes, usage_data);
 }
@@ -161,8 +161,8 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   std::vector<route_usage> route_usages(total_number_of_nodes);
   nodes_.resize(total_number_of_nodes);
   usage_data usage_data = {
-      .used_sections = std::vector<std::vector<section::id>>(total_number_of_nodes),
-      .usages = std::vector<std::vector<route_usage*>>(infra->graph_.sections_.size()),
+      .used_sections = std::vector<std::vector<exclusion_section::id>>(total_number_of_nodes),
+      .usages = std::vector<std::vector<route_usage*>>(infra->exclusion_.exclusion_sections_.size()),
       .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
   };
 
@@ -232,7 +232,8 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   for (auto& usage : route_usages) {
     auto const& node = nodes_[usage.id_];
     auto const& ir = infra->interlocking_.routes_[node.ir_id_];
-    auto sections = ir.get_used_sections(infra);
+    // auto sections = ir.get_used_sections(infra);
+    auto sections = ir.get_used_exclusion_sections(infra);
 
     for(auto section : sections) {
       usage_data.used_sections[node.id_].emplace_back(section);
@@ -247,7 +248,6 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
     }
   }
 
-  std::cout << "num of nodes: " << total_number_of_nodes << std::endl;
   print_ordering_graph_stats(*this);
 }
 

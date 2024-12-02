@@ -579,8 +579,10 @@ void connect_nodes(graph& n) {
 }
 
 section::id create_section(graph& n) {
-  n.sections_.resize(n.sections_.size() + 1);
-  return static_cast<section::id>(n.sections_.size() - 1);
+  auto id = static_cast<section::id>(n.sections_.size());
+  n.sections_.resize(id + 1);
+  n.sections_[id].id_ = id;
+  return id;
 }
 
 void connect_border(simple_element& from_border, bool low_border,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "soro/infrastructure/exclusion/exclusion_section.h"
 #include "soro/infrastructure/exclusion/exclusion_graph.h"
 #include "soro/infrastructure/exclusion/exclusion_set.h"
 #include "soro/infrastructure/interlocking/interlocking_route.h"
@@ -25,6 +26,9 @@ struct exclusion {
 
   // maps IRs to their cliques in the exclusion graph
   soro::vector<exclusion_set::ids> irs_to_exclusion_sets_;
+
+  soro::vector<exclusion_section> exclusion_sections_;
+  soro::vector<soro::vector<exclusion_section::id>> section_to_exclusion_sections_;
 };
 
 }  // namespace soro::infra

@@ -82,6 +82,7 @@ struct section {
 
   si::length length_{si::ZERO<si::length>};
   line::id line_id_{INVALID_LINE_ID};
+  id id_;
 };
 
 }  // namespace soro::infra

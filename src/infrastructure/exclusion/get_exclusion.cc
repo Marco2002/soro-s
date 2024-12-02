@@ -9,6 +9,7 @@
 #include "soro/infrastructure/exclusion/exclusion_elements.h"
 #include "soro/infrastructure/exclusion/get_exclusion_graph.h"
 #include "soro/infrastructure/exclusion/read_cliques.h"
+#include "soro/infrastructure/exclusion/exclusion_section.h"
 #include "soro/infrastructure/infrastructure.h"
 
 namespace soro::infra {
@@ -97,6 +98,33 @@ soro::vector<interlocking_route::ids> get_closed_element_used_by(
   return element_used_by;
 }
 
+std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_section::id>>> get_exclusion_sections(const soro::vector<section>& sections) {
+  soro::vector<exclusion_section> exclusion_sections = {};
+  soro::vector<soro::vector<exclusion_section::id>> section_to_exclusion_sections(sections.size());
+
+  exclusion_section::id global_id = 0;
+  for(auto const& section : sections) {
+    auto iterator = section.iterate<direction::Rising, skip::No>();
+
+    auto previous_element = *(iterator.begin());
+    for(auto const element : iterator) {
+      if(element->type() == type::MAIN_SIGNAL) {
+        exclusion_sections.emplace_back(previous_element->id(), element->id(), global_id);
+        section_to_exclusion_sections[section.id_].emplace_back(global_id);
+        ++global_id;
+        previous_element = element;
+      }
+    }
+    exclusion_sections.emplace_back(previous_element->id(), section.last_rising()->id(), global_id);
+    section_to_exclusion_sections[section.id_].emplace_back(global_id);
+    ++global_id;
+  }
+
+  return {exclusion_sections, section_to_exclusion_sections};
+}
+
+vector<exclusion_section> get_exclusion_sections(
+    const infrastructure infrastructure1);
 exclusion get_exclusion(infrastructure_t const& infra_t,
                         std::filesystem::path const& clique_path,
                         option<exclusion_elements> const exclusion_elements,
@@ -123,6 +151,10 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
 
   ex.irs_to_exclusion_sets_ = get_irs_to_exclusion_sets(
       ex.exclusion_sets_, infra->interlocking_.routes_.size());
+
+  auto const [exclusion_sections, section_to_exclusion_sections] = get_exclusion_sections(infra->graph_.sections_);
+  ex.exclusion_sections_ = exclusion_sections;
+  ex.section_to_exclusion_sections_ = section_to_exclusion_sections;
 
   return ex;
 }
