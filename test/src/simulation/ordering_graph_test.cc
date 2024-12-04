@@ -81,6 +81,7 @@ TEST_SUITE("ordering graph") {
     opts.exclusions_ = true;
     opts.interlocking_ = true;
     opts.exclusion_graph_ = false;
+    opts.exclusion_sets_ = true;
     opts.layout_ = false;
 
     infrastructure const infra(opts);
@@ -137,10 +138,11 @@ TEST_SUITE("ordering graph") {
     auto opts = soro::test::SMALL_OPTS;
     auto tt_opts = soro::test::CROSS_OPTS;
 
-    opts.exclusions_ = false;
+    opts.exclusions_ = true;
     opts.interlocking_ = true;
     opts.exclusion_graph_ = false;
     opts.layout_ = false;
+    opts.exclusion_sets_ = true;
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);
@@ -159,8 +161,9 @@ TEST_SUITE("ordering graph") {
     opts.exclusion_graph_ = false;
     opts.layout_ = false;
 
+
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                         .end_ = rep_to_absolute_time(1636786800) + hours{1}};
+                          .end_ = rep_to_absolute_time(1636786800) + hours{2}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);

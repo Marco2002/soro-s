@@ -108,7 +108,7 @@ std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_sectio
 
     auto previous_element = *(iterator.begin());
     for(auto const element : iterator) {
-      if(element->type() == type::MAIN_SIGNAL) {
+      if(element->type() == type::MAIN_SIGNAL || element->type() == type::HALT) {
         exclusion_sections.emplace_back(previous_element->id(), element->id(), global_id);
         section_to_exclusion_sections[section.id_].emplace_back(global_id);
         ++global_id;
@@ -126,7 +126,8 @@ std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_sectio
 exclusion get_exclusion(infrastructure_t const& infra_t,
                         std::filesystem::path const& clique_path,
                         option<exclusion_elements> const exclusion_elements,
-                        option<exclusion_graph> const exclusion_graph) {
+                        option<exclusion_graph> const exclusion_graph,
+                        option<exclusion_set> const exclusion_sets) {
   infrastructure const infra(&infra_t);
 
   exclusion ex;
@@ -143,9 +144,10 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
 
     ex.exclusion_graph_ = get_exclusion_graph(ex.exclusion_elements_.closed_,
                                               closed_element_used_by, infra);
+  }
 
+  if(exclusion_sets) {
     ex.exclusion_sets_ = read_cliques(clique_path);
-
     ex.irs_to_exclusion_sets_ = get_irs_to_exclusion_sets(
         ex.exclusion_sets_, infra->interlocking_.routes_.size());
   }
