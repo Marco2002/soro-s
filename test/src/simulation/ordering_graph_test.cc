@@ -137,7 +137,7 @@ TEST_SUITE("ordering graph") {
     auto opts = soro::test::SMALL_OPTS;
     auto tt_opts = soro::test::CROSS_OPTS;
 
-    opts.exclusions_ = true;
+    opts.exclusions_ = false;
     opts.interlocking_ = true;
     opts.exclusion_graph_ = false;
     opts.layout_ = false;
@@ -150,7 +150,7 @@ TEST_SUITE("ordering graph") {
     check_no_transient_edges(og);
   }
 
-  TEST_CASE("de_kss graph" * doctest::skip(true)) {
+  TEST_CASE("de_kss graph") {
     auto opts = soro::test::DE_ISS_OPTS;
     auto tt_opts = soro::test::DE_KSS_OPTS;
 

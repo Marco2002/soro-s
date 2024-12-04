@@ -123,8 +123,6 @@ std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_sectio
   return {exclusion_sections, section_to_exclusion_sections};
 }
 
-vector<exclusion_section> get_exclusion_sections(
-    const infrastructure infrastructure1);
 exclusion get_exclusion(infrastructure_t const& infra_t,
                         std::filesystem::path const& clique_path,
                         option<exclusion_elements> const exclusion_elements,
@@ -145,12 +143,12 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
 
     ex.exclusion_graph_ = get_exclusion_graph(ex.exclusion_elements_.closed_,
                                               closed_element_used_by, infra);
+
+    ex.exclusion_sets_ = read_cliques(clique_path);
+
+    ex.irs_to_exclusion_sets_ = get_irs_to_exclusion_sets(
+        ex.exclusion_sets_, infra->interlocking_.routes_.size());
   }
-
-  ex.exclusion_sets_ = read_cliques(clique_path);
-
-  ex.irs_to_exclusion_sets_ = get_irs_to_exclusion_sets(
-      ex.exclusion_sets_, infra->interlocking_.routes_.size());
 
   auto const [exclusion_sections, section_to_exclusion_sections] = get_exclusion_sections(infra->graph_.sections_);
   ex.exclusion_sections_ = exclusion_sections;

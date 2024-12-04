@@ -297,8 +297,32 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
   section::ids used_sections = get_used_sections(infra);
   exclusion_section::ids used_exclusion_sections;
 
+  auto const first_element = first_node(infra)->element_;
+  auto last_element = last_node(infra)->element_;
+  if(used_sections.size() == 1) {
+    auto const& exclusion_sections = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
+    size_t index_of_first = 0;
+    size_t index_of_last = 0;
+    for(size_t i = 0; i < exclusion_sections.size(); ++i) {
+      auto const& es = infra->exclusion_.exclusion_sections_[exclusion_sections[i]];
+      if(es.contains_end(first_element->id())) index_of_first = i;
+      if(es.contains_end(last_element->id())) index_of_last = i;
+    }
+    if(index_of_first == exclusion_sections.size() - 1 &&
+        !infra->exclusion_.exclusion_sections_[exclusion_sections[index_of_first-1]].contains_end(last_element->id())) {
+      ++index_of_first;
+    }
+    if(index_of_last == exclusion_sections.size() - 1 &&
+        !infra->exclusion_.exclusion_sections_[exclusion_sections[index_of_last-1]].contains_end(last_element->id())) {
+      ++index_of_last;
+    }
+    auto const lower_bound = exclusion_sections.begin() + std::min(static_cast<long>(index_of_first), static_cast<long>(index_of_last));
+    auto const upper_bound = exclusion_sections.begin() + std::max(static_cast<long>(index_of_first), static_cast<long>(index_of_last));
+    used_exclusion_sections.insert(used_exclusion_sections.end(), lower_bound, upper_bound);
+    return used_exclusion_sections;
+  }
+
   // add first exclusion section and all the following ones that are part of the same section
-  auto first_element = first_node(infra)->element_;
   if(!first_element->is_track_element()) {
     // first element is either start or end of a section => add the whole section
     auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
@@ -332,14 +356,13 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
   }
 
   // add last exclusion section and all the exclusion section that lead to it in the last section
-  auto last_element = last_node(infra)->element_;
   if(!last_element->is_track_element()) {
     // last element is either start or end of a section => add the whole section
     auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.back()];
     used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
   } else {
     auto last_sr = station_routes_.back();
-    auto reverse_iterator = station_route_reverse(infra, last_sr, station_routes_.size() == 1 ? start_offset_ : 0, end_offset_);
+    auto reverse_iterator = station_route_reverse(infra, last_sr, station_routes_.size() == 1 ? start_offset_ : 0, end_offset_-1);
     element_id last_non_tracking_element = std::find_if(reverse_iterator.begin(), reverse_iterator.end(), [](auto const& rn) {
                                           return !rn.node_->element_->is_track_element();
                                         })->node_->element_->id();

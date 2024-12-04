@@ -87,27 +87,36 @@ void search_with_break(ordering_node::id node_id, soro::data::bitvec& handled_ex
     }
   }
 
-
-
   if(!next_usages.empty()) {
-    auto next_usage = (*(std::min_element(next_usages.begin(), next_usages.end(), [](auto const a, auto const b) {
-                        return a->timestamp_ < b->timestamp_;
-                      })))->id_;
-    if(!handled_exclusions[next_usage]) {
-      nodes[node_id].out_.push_back(next_usage);
-      nodes[next_usage].in_.push_back(node_id);
+    std::sort(next_usages.begin(), next_usages.end(), [](auto const a, auto const b) {
+      return a->timestamp_ < b->timestamp_;
+    });
 
-      // search other node if not yet searched
-      if(usage_data.reachability_data[next_usage].none()) {
-        auto end_node = &nodes[next_usage];
-        while(!end_node->out_.empty()) end_node = &nodes[end_node->out_.front()];
-        soro::data::bitvec next_usage_exclusions;
-        next_usage_exclusions.resize(handled_exclusions.size());
-        search_with_break(end_node->id_, next_usage_exclusions, next_usage, nodes, usage_data);
+    for(auto const next_usage_ref : next_usages) {
+      auto const next_usage = next_usage_ref->id_;
+      if(!handled_exclusions[next_usage]) {
+        nodes[node_id].out_.push_back(next_usage);
+        nodes[next_usage].in_.push_back(node_id);
+
+        // search other node if not yet searched
+        if(usage_data.reachability_data[next_usage].none()) {
+          auto end_node = &nodes[next_usage];
+          soro::data::bitvec next_usage_exclusions;
+          next_usage_exclusions.resize(handled_exclusions.size());
+
+          while(!end_node->out_.empty()) {
+            if(usage_data.reachability_data[end_node->out_.front()].any()) {
+              next_usage_exclusions = usage_data.reachability_data[end_node->out_.front()];
+              break;
+            }
+            end_node = &nodes[end_node->out_.front()];
+          }
+          search_with_break(end_node->id_, next_usage_exclusions, next_usage, nodes, usage_data);
+        }
+
+        auto other_exclusions = usage_data.reachability_data[next_usage];
+        handled_exclusions |= other_exclusions;
       }
-
-      auto other_exclusions = usage_data.reachability_data[next_usage];
-      handled_exclusions |= other_exclusions;
     }
   }
 
