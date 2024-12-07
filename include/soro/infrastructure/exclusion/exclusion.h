@@ -29,6 +29,7 @@ struct exclusion {
 
   soro::vector<exclusion_section> exclusion_sections_;
   soro::vector<soro::vector<exclusion_section::id>> section_to_exclusion_sections_;
+  std::unordered_map<element_id, exclusion_section::id> cross_sections_;
 };
 
 }  // namespace soro::infra

@@ -98,12 +98,28 @@ soro::vector<interlocking_route::ids> get_closed_element_used_by(
   return element_used_by;
 }
 
-std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_section::id>>> get_exclusion_sections(const soro::vector<section>& sections) {
+std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_section::id>>, std::unordered_map<element_id, exclusion_section::id>> get_exclusion_sections(const soro::vector<section>& sections) {
   soro::vector<exclusion_section> exclusion_sections = {};
+  std::unordered_map<element_id, exclusion_section::id> cross_sections = {};
   soro::vector<soro::vector<exclusion_section::id>> section_to_exclusion_sections(sections.size());
+
+  auto add_cross_section = [&exclusion_sections, &cross_sections](auto const& element, exclusion_section::id& global_id) {
+    if(cross_sections.find(element->id()) == cross_sections.end()) {
+      exclusion_sections.emplace_back(element->id(), element->id(), global_id);
+      cross_sections[element->id()] = global_id;
+      ++global_id;
+    }
+  };
 
   exclusion_section::id global_id = 0;
   for(auto const& section : sections) {
+    if(section.first_rising()->type() == type::CROSS) {
+      add_cross_section(section.first_rising(), global_id);
+    }
+    if(section.first_falling()->type() == type::CROSS) {
+      add_cross_section(section.first_falling(), global_id);
+    }
+
     auto iterator = section.iterate<direction::Rising, skip::No>();
 
     auto previous_element = *(iterator.begin());
@@ -120,7 +136,7 @@ std::tuple<vector<exclusion_section>, soro::vector<soro::vector<exclusion_sectio
     ++global_id;
   }
 
-  return {exclusion_sections, section_to_exclusion_sections};
+  return {exclusion_sections, section_to_exclusion_sections, cross_sections};
 }
 
 exclusion get_exclusion(infrastructure_t const& infra_t,
@@ -152,9 +168,10 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
         ex.exclusion_sets_, infra->interlocking_.routes_.size());
   }
 
-  auto const [exclusion_sections, section_to_exclusion_sections] = get_exclusion_sections(infra->graph_.sections_);
+  auto const [exclusion_sections, section_to_exclusion_sections, cross_sections] = get_exclusion_sections(infra->graph_.sections_);
   ex.exclusion_sections_ = exclusion_sections;
   ex.section_to_exclusion_sections_ = section_to_exclusion_sections;
+  ex.cross_sections_ = cross_sections;
 
   return ex;
 }

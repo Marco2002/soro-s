@@ -296,6 +296,15 @@ utls::recursive_generator<route_node> station_route_reverse(infrastructure const
 exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastructure const& infra) const {
   section::ids used_sections = get_used_sections(infra);
   exclusion_section::ids used_exclusion_sections;
+  std::set<element_id> handled_crosses;
+
+  auto const add_cross_section = [&handled_crosses, &used_exclusion_sections, &infra](element_id cross_element) {
+    if(handled_crosses.contains(cross_element)) {
+      return;
+    }
+    handled_crosses.insert(cross_element);
+    used_exclusion_sections.push_back(infra->exclusion_.cross_sections_.at(cross_element));
+  };
 
   auto const first_element = first_node(infra)->element_;
   auto last_element = last_node(infra)->element_;
@@ -319,6 +328,10 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
     auto const lower_bound = exclusion_sections.begin() + std::min(static_cast<long>(index_of_first), static_cast<long>(index_of_last));
     auto const upper_bound = exclusion_sections.begin() + std::max(static_cast<long>(index_of_first), static_cast<long>(index_of_last));
     used_exclusion_sections.insert(used_exclusion_sections.end(), lower_bound, upper_bound);
+
+    // add cross sections if needed
+    if(first_element->type() == type::CROSS) add_cross_section(first_element->id());
+    if(last_element->type() == type::CROSS) add_cross_section(last_element->id());
     return used_exclusion_sections;
   }
 
@@ -327,10 +340,11 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
     // first element is either start or end of a section => add the whole section
     auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
     used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+    if(first_element->type() == type::CROSS) add_cross_section(first_element->id());
   } else {
-    element_id first_non_tracking_element = std::find_if(iterate(infra).begin(), iterate(infra).end(), [](auto const& rn) {
+    auto const& first_non_tracking_element = std::find_if(iterate(infra).begin(), iterate(infra).end(), [](auto const& rn) {
                                           return !rn.node_->element_->is_track_element();
-                                        })->node_->element_->id();
+                                        })->node_->element_;
     auto const& exclusions_by_first_section = infra->exclusion_.section_to_exclusion_sections_[used_sections.front()];
     // find first exclusion_section that contains first_element
     long index_of_match = -1;
@@ -343,16 +357,19 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
     }
     utls::sassert(index_of_match != -1, "couldn't find first exclusion section that contains first non track element");
     bool collect_left = infra->graph_.sections_[used_sections[0]].first_rising()->id() ==
-        first_non_tracking_element;
+        first_non_tracking_element->id();
     used_exclusion_sections.insert(used_exclusion_sections.end(),
                                    collect_left ? exclusions_by_first_section.begin() : (exclusions_by_first_section.begin() + index_of_match + 1),
                                    collect_left ? (exclusions_by_first_section.begin() + index_of_match + 1) : exclusions_by_first_section.end());
+    if(first_non_tracking_element->type() == type::CROSS) add_cross_section(first_non_tracking_element->id());
   }
 
   // add all the exclusion sections in between used_sections[1, -1]
   for(soro::size_t i = 1; i < used_sections.size() - 1; ++i) {
     auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections[i]];
     used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+    if(infra->graph_.sections_[used_sections[i]].first_rising()->type() == type::CROSS) add_cross_section(infra->graph_.sections_[used_sections[i]].first_rising()->id());
+    if(infra->graph_.sections_[used_sections[i]].first_falling()->type() == type::CROSS) add_cross_section(infra->graph_.sections_[used_sections[i]].first_falling()->id());
   }
 
   // add last exclusion section and all the exclusion section that lead to it in the last section
@@ -360,12 +377,13 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
     // last element is either start or end of a section => add the whole section
     auto const& exclusions = infra->exclusion_.section_to_exclusion_sections_[used_sections.back()];
     used_exclusion_sections.insert(used_exclusion_sections.end(), exclusions.begin(), exclusions.end());
+    if(last_element->type() == type::CROSS) add_cross_section(first_element->id());
   } else {
     auto last_sr = station_routes_.back();
     auto reverse_iterator = station_route_reverse(infra, last_sr, station_routes_.size() == 1 ? start_offset_ : 0, end_offset_-1);
-    element_id last_non_tracking_element = std::find_if(reverse_iterator.begin(), reverse_iterator.end(), [](auto const& rn) {
+    auto const& last_non_tracking_element = std::find_if(reverse_iterator.begin(), reverse_iterator.end(), [](auto const& rn) {
                                           return !rn.node_->element_->is_track_element();
-                                        })->node_->element_->id();
+                                        })->node_->element_;
     auto const& exclusions_by_last_section = infra->exclusion_.section_to_exclusion_sections_[used_sections.back()];
     // find first exclusion_section that contains last_element
     long index_of_match = -1;
@@ -378,10 +396,11 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
     }
     utls::sassert(index_of_match != -1, "couldn't find last exclusion section that contains last non track element");
     bool collect_left = infra->graph_.sections_[used_sections.back()].first_rising()->id() ==
-        last_non_tracking_element;
+        last_non_tracking_element->id();
     used_exclusion_sections.insert(used_exclusion_sections.end(),
                                    collect_left ? exclusions_by_last_section.begin() : (exclusions_by_last_section.begin() + index_of_match + 1),
                                    collect_left ? (exclusions_by_last_section.begin() + index_of_match + 1) : exclusions_by_last_section.end());
+    if(last_non_tracking_element->type() == type::CROSS) add_cross_section(last_non_tracking_element->id());
   }
 
   return used_exclusion_sections;

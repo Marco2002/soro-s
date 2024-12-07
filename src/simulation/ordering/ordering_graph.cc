@@ -1,22 +1,15 @@
 #include "soro/simulation/ordering/ordering_graph.h"
 
 #include "range/v3/range/conversion.hpp"
-#include "range/v3/view/filter.hpp"
-#include "range/v3/view/transform.hpp"
 
-#include "utl/concat.h"
-#include "utl/erase.h"
-#include "utl/erase_duplicates.h"
 #include "utl/parallel_for.h"
 #include "utl/timer.h"
 
-#include "soro/utls/graph/traversal.h"
 #include "soro/utls/std_wrapper/contains.h"
 #include "soro/utls/std_wrapper/count_if.h"
 #include "soro/utls/std_wrapper/sort.h"
 
 #include "soro/runtime/runtime.h"
-#include "soro/simulation/ordering/remove_transitive_edges.h"
 
 namespace soro::simulation {
 
@@ -241,10 +234,10 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   for (auto& usage : route_usages) {
     auto const& node = nodes_[usage.id_];
     auto const& ir = infra->interlocking_.routes_[node.ir_id_];
-    // auto sections = ir.get_used_sections(infra);
     auto sections = ir.get_used_exclusion_sections(infra);
 
     for(auto section : sections) {
+      // if(!usage_data.usages[section].empty() && usage_data.usages[section].back() == &usage) continue;
       usage_data.used_sections[node.id_].emplace_back(section);
       usage_data.usages[section].push_back(&usage);
     }
