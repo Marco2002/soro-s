@@ -68,9 +68,14 @@ struct usage_data {
   }
 };
 
-void search_with_break(ordering_node::id node_id, soro::data::bitvec& handled_exclusions, ordering_node::id break_node,
-                       std::vector<ordering_node>& nodes, usage_data& usage_data) {
-  handled_exclusions.set(node_id, true);
+void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, usage_data& usage_data) {
+  soro::data::bitvec handled_exclusions;
+  if(nodes[node_id].out_.empty()) {
+    handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
+  } else {
+    handled_exclusions = usage_data.reachability_data[nodes[node_id].out_.front()];
+  }
+  handled_exclusions.set(node_id);
   auto const used_sections = usage_data.used_sections[node_id];
   std::vector<route_usage*> next_usages;
   for(auto const section : used_sections) {
@@ -91,22 +96,6 @@ void search_with_break(ordering_node::id node_id, soro::data::bitvec& handled_ex
         nodes[node_id].out_.push_back(next_usage);
         nodes[next_usage].in_.push_back(node_id);
 
-        // search other node if not yet searched
-        if(usage_data.reachability_data[next_usage].none()) {
-          auto end_node = &nodes[next_usage];
-          soro::data::bitvec next_usage_exclusions;
-          next_usage_exclusions.resize(handled_exclusions.size());
-
-          while(!end_node->out_.empty()) {
-            if(usage_data.reachability_data[end_node->out_.front()].any()) {
-              next_usage_exclusions = usage_data.reachability_data[end_node->out_.front()];
-              break;
-            }
-            end_node = &nodes[end_node->out_.front()];
-          }
-          search_with_break(end_node->id_, next_usage_exclusions, next_usage, nodes, usage_data);
-        }
-
         auto other_exclusions = usage_data.reachability_data[next_usage];
         handled_exclusions |= other_exclusions;
       }
@@ -114,26 +103,6 @@ void search_with_break(ordering_node::id node_id, soro::data::bitvec& handled_ex
   }
 
   usage_data.reachability_data[node_id] = handled_exclusions;
-  if(node_id != break_node && !nodes[node_id].in_.empty()) {
-    search_with_break(nodes[node_id].in_.front(), handled_exclusions, break_node, nodes, usage_data);
-  }
-}
-
-void search(ordering_node::id const node_id, soro::data::bitvec& handled_exclusions,
-            std::vector<ordering_node>& nodes, usage_data& usage_data) {
-  search_with_break(node_id, handled_exclusions, ordering_node::INVALID, nodes, usage_data);
-}
-
-void start_search(ordering_node::id const node_id, std::vector<ordering_node>& nodes,
-                  usage_data& usage_data) {
-  soro::data::bitvec handled_exclusions;
-  // if the next node was already visited, then take its reachability data as handled exclusions
-  if(nodes[node_id].out_.empty()) {
-    handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
-  } else {
-    handled_exclusions = usage_data.reachability_data[nodes[node_id].out_.front()];
-  }
-  search(node_id, handled_exclusions, nodes, usage_data);
 }
 
 ordering_graph::ordering_graph(infra::infrastructure const& infra,
@@ -227,7 +196,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   }
   // sort route_usages by from time
   utls::sort(route_usages, [](auto const& a, auto const& b) {
-    return a.timestamp_ < b.timestamp_;
+    return std::tie(a.timestamp_, a.id_) < std::tie(b.timestamp_, b.id_);
   });
 
   // populate used_sections and usages
@@ -245,9 +214,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
 
   // start adding edges between train trips by searching backwards though ordering nodes
   for(auto it = route_usages.rbegin(); it != route_usages.rend(); ++it) {
-    if(usage_data.reachability_data[it->id_].none()) {
-      start_search(it->id_, nodes_, usage_data);
-    }
+    visit_node(it->id_, nodes_, usage_data);
   }
 
   print_ordering_graph_stats(*this);
