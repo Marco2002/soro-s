@@ -89,7 +89,7 @@ void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, us
     }
   }
   handled_exclusions.set(0);
-  auto const used_sections = usage_data.used_sections[node_id];
+  auto const used_sections = usage_data.used_sections[nodes[node_id].ir_id_];
   std::vector<route_usage*> next_usages;
   for(auto const section : used_sections) {
     auto next_usage = usage_data.find_next_usage(section, node_id);
@@ -152,7 +152,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   std::vector<route_usage> route_usages(total_number_of_nodes);
   nodes_.resize(total_number_of_nodes);
   usage_data usage_data = {
-      .used_sections = std::vector<std::vector<exclusion_section::id>>(total_number_of_nodes),
+      .used_sections = std::vector<std::vector<exclusion_section::id>>(infra->interlocking_.routes_.size()),
       .usages = std::vector<std::vector<route_usage*>>(infra->exclusion_.exclusion_sections_.size()),
       .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
       .node_order_index = std::vector<unsigned long>(total_number_of_nodes),
@@ -233,14 +233,18 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   for (auto& usage : route_usages) {
     auto const& node = nodes_[usage.id_];
     auto const& ir = infra->interlocking_.routes_[node.ir_id_];
-    auto sections = ir.get_used_exclusion_sections(infra);
+    auto sections = usage_data.used_sections[ir.id_].empty()
+                        ? ir.get_used_exclusion_sections(infra)
+                        : usage_data.used_sections[ir.id_];
 
     for(auto section : sections) {
       if(!usage_data.usages[section].empty()) {
         ++usage_data.number_of_predecessors[node.id_];
       }
-      usage_data.used_sections[node.id_].emplace_back(section);
       usage_data.usages[section].push_back(&usage);
+    }
+    if(usage_data.used_sections[ir.id_].empty()) {
+      usage_data.used_sections[ir.id_] = sections;
     }
   }
 
