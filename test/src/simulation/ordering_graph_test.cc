@@ -158,7 +158,7 @@ TEST_SUITE("ordering graph") {
 
     opts.exclusions_ = true;
     opts.interlocking_ = true;
-    opts.exclusion_graph_ = false;
+    opts.exclusion_graph_ = true;
     opts.exclusion_sets_ = true;
     opts.layout_ = false;
 

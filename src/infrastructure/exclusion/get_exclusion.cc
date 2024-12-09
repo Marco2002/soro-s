@@ -148,6 +148,7 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
 
   exclusion ex;
 
+  utl::scoped_timer const timer("calculating exclusion graph");
   if (exclusion_elements) {
     ex.exclusion_elements_.closed_ = get_closed_exclusion_elements(infra);
     ex.exclusion_elements_.open_ =
@@ -161,6 +162,8 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
     ex.exclusion_graph_ = get_exclusion_graph(ex.exclusion_elements_.closed_,
                                               closed_element_used_by, infra);
   }
+  timer.print("done calculating exclusion graph");
+
 
   if(exclusion_sets) {
     ex.exclusion_sets_ = read_cliques(clique_path);
@@ -168,11 +171,12 @@ exclusion get_exclusion(infrastructure_t const& infra_t,
         ex.exclusion_sets_, infra->interlocking_.routes_.size());
   }
 
+  utl::scoped_timer const timer2("calculating exclusion sections");
   auto const [exclusion_sections, section_to_exclusion_sections, cross_sections] = get_exclusion_sections(infra->graph_.sections_);
   ex.exclusion_sections_ = exclusion_sections;
   ex.section_to_exclusion_sections_ = section_to_exclusion_sections;
   ex.cross_sections_ = cross_sections;
-
+  timer2.print("done calculating exclusion sections");
   return ex;
 }
 

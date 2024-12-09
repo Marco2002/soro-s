@@ -55,12 +55,12 @@ struct route_usage {
 };
 
 struct usage_data {
-  std::vector<std::vector<exclusion_section::id>> used_sections;
-  std::vector<std::vector<route_usage*>> usages;
-  std::vector<soro::data::bitvec> reachability_data;
-  std::vector<unsigned long> node_order_index;
-  std::vector<unsigned int> number_of_predecessors;
-  std::vector<unsigned int> number_of_handled_predecessors;
+  std::vector<std::vector<exclusion_section::id>> used_sections; // the used exclusion sections of each interlocking route
+  std::vector<std::vector<route_usage*>> usages; // the usages of each exclusion section (will be ordered by time)
+  std::vector<soro::data::bitvec> reachability_data; // reachability matrix. For each node it stores a bitset of reachable nodes
+  std::vector<unsigned long> node_order_index; // maps node to its index in topological order
+  std::vector<unsigned int> number_of_predecessors; // the number of possible predecessors for each node (previous usage of train + previous usage of its exclusion sections)
+  std::vector<unsigned int> number_of_handled_predecessors; // the number of handled predecessors for each node.
 
   route_usage* find_next_usage(section::id const section, ordering_node::id const node_id) {
     auto const& section_usages = usages[section];
@@ -134,7 +134,6 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 
 ordering_graph::ordering_graph(const infra::infrastructure& infra,
                                const tt::timetable& tt, const soro::simulation::ordering_graph::filter& filter) {
-  std::cout << "filtering trains: ";
   utl::scoped_timer const timer("creating ordering graph");
   ordering_node::id glob_current_node_id = 0;
   size_t total_number_of_nodes = 0;
