@@ -58,7 +58,6 @@ struct usage_data {
   std::vector<std::vector<exclusion_section::id>> used_sections; // the used exclusion sections of each interlocking route
   std::vector<std::vector<route_usage*>> usages; // the usages of each exclusion section (will be ordered by time)
   std::vector<soro::data::bitvec> reachability_data; // reachability matrix. For each node it stores a bitset of reachable nodes
-  std::vector<unsigned long> node_order_index; // maps node to its index in topological order
   std::vector<unsigned int> number_of_predecessors; // the number of possible predecessors for each node (previous usage of train + previous usage of its exclusion sections)
   std::vector<unsigned int> number_of_handled_predecessors; // the number of handled predecessors for each node.
 
@@ -107,9 +106,7 @@ void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, us
         nodes[node_id].out_.push_back(next_usage);
         nodes[next_usage].in_.push_back(node_id);
 
-        auto other_exclusions = usage_data.reachability_data[next_usage];
-
-        handled_exclusions |= other_exclusions;
+        handled_exclusions |= usage_data.reachability_data[next_usage];
       }
       if(usage_data.number_of_handled_predecessors[next_usage] == usage_data.number_of_predecessors[next_usage]) {
         usage_data.reachability_data[next_usage].reset();
@@ -149,7 +146,6 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
       .used_sections = std::vector<std::vector<exclusion_section::id>>(infra->interlocking_.routes_.size()),
       .usages = std::vector<std::vector<route_usage*>>(infra->exclusion_.exclusion_sections_.size()),
       .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
-      .node_order_index = std::vector<unsigned long>(total_number_of_nodes),
       .number_of_predecessors = std::vector<unsigned int>(total_number_of_nodes),
       .number_of_handled_predecessors = std::vector<unsigned int>(total_number_of_nodes),
   };
@@ -243,7 +239,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   }
 
   // start adding edges between train trips by searching backwards though ordering nodes
-  for(auto & route_usage : std::ranges::reverse_view(route_usages)) {
+  for(auto const& route_usage : std::ranges::reverse_view(route_usages)) {
     visit_node(route_usage.id_, nodes_, usage_data);
   }
 
