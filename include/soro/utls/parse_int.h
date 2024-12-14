@@ -25,13 +25,13 @@ template <std::integral T>
   if (success.ec != std::errc{}) {
     return utls::unexpected(success.ec,
                             "error {} while parsing integer input {}",
-                            success.ec, std::quoted(start));
+                            success.ec, start);
   }
 
   if (success.ptr != end) {
     return utls::unexpected(std::errc::invalid_argument,
                             "error {} while parsing integer input {}",
-                            std::errc::invalid_argument, std::quoted(start));
+                            std::errc::invalid_argument, start);
   }
 
   return val;
@@ -43,10 +43,10 @@ template <std::integral T>
   auto const [success, val] = parse_int_impl<T>(start, end);
 
   utls::sassert(success.ec == std::errc{},
-                "Error while parsing integer input {}.", std::quoted(start));
+                "Error while parsing integer input {}.", start);
 
   utls::sassert(success.ptr == end, "Error while parsing integer input {}.",
-                std::quoted(start));
+                start);
 
   return val;
 }
