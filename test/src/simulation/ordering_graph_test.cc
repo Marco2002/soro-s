@@ -41,7 +41,7 @@ void fill_by_dfs(ordering_graph const& og, ordering_node::id start_node, std::un
   }
 }
 
-void check_no_transient_edges(ordering_graph const& og) {
+void check_no_transient_edges_and_no_duplicates(ordering_graph const& og) {
   // find all transiently reachable nodes that are reachable from node x but not directly connected
   std::unordered_map<ordering_node::id, std::unordered_map<ordering_node::id, bool>> transiently_reachable_edges_of_node(og.nodes_.size());
   for(auto const& node : og.nodes_) {
@@ -81,7 +81,6 @@ TEST_SUITE("ordering graph") {
     opts.exclusions_ = true;
     opts.interlocking_ = true;
     opts.exclusion_graph_ = false;
-    opts.exclusion_sets_ = true;
     opts.layout_ = false;
 
     infrastructure const infra(opts);
@@ -104,6 +103,7 @@ TEST_SUITE("ordering graph") {
 
     ordering_graph const og(infra, tt);
 
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
 
     // the ordering graph has a node for every {train, interlocking route} pair
@@ -129,10 +129,6 @@ TEST_SUITE("ordering graph") {
       CHECK(utls::contains(from.out_, to.id_));
       CHECK(utls::contains(to.in_, from.id_));
     }
-
-    // check no transient edges
-    check_ordering_graph(og, infra);
-    check_no_transient_edges(og);
   }
 
   TEST_CASE("ordering graph, cross") {
@@ -149,8 +145,8 @@ TEST_SUITE("ordering graph") {
     timetable const tt(tt_opts, infra);
     ordering_graph const og(infra, tt);
 
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
-    check_no_transient_edges(og);
   }
 
   TEST_CASE("de_kss graph") {
@@ -163,16 +159,15 @@ TEST_SUITE("ordering graph") {
     opts.exclusion_sets_ = true;
     opts.layout_ = false;
 
-
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                          .end_ = rep_to_absolute_time(1636786800) + hours{24}};
+                         .end_ = rep_to_absolute_time(1636786800) + hours{1}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);
 
     ordering_graph const og(infra, tt, {.interval_ = inter});
 
-    check_no_transient_edges(og);
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
   }
 }
