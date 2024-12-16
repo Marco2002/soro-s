@@ -99,7 +99,7 @@ TEST_SUITE("ordering graph") {
     check_ordering_graph(og, infra);
   }
 
-  TEST_CASE("de_kss graph" * doctest::skip(true)) {
+  TEST_CASE("de_kss graph") {
     auto opts = soro::test::DE_ISS_OPTS;
     auto tt_opts = soro::test::DE_KSS_OPTS;
 
@@ -109,7 +109,7 @@ TEST_SUITE("ordering graph") {
     opts.layout_ = false;
 
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                         .end_ = rep_to_absolute_time(1636786800) + hours{2}};
+                         .end_ = rep_to_absolute_time(1636786800) + hours{24}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);

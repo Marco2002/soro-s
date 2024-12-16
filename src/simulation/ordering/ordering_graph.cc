@@ -1,22 +1,17 @@
 #include "soro/simulation/ordering/ordering_graph.h"
 
 #include "range/v3/range/conversion.hpp"
-#include "range/v3/view/filter.hpp"
-#include "range/v3/view/transform.hpp"
 
-#include "utl/concat.h"
-#include "utl/erase.h"
 #include "utl/erase_duplicates.h"
 #include "utl/parallel_for.h"
 #include "utl/timer.h"
 
-#include "soro/utls/graph/traversal.h"
 #include "soro/utls/std_wrapper/contains.h"
 #include "soro/utls/std_wrapper/count_if.h"
 #include "soro/utls/std_wrapper/sort.h"
 
 #include "soro/runtime/runtime.h"
-#include "soro/simulation/ordering/remove_transitive_edges.h"
+#include "soro/simulation/ordering/compute_transitive_reduction.h"
 
 namespace soro::simulation {
 
@@ -182,6 +177,9 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
 
   utl::parallel_for(orderings, [](auto&& usage_order) {
     utls::sort(usage_order, [](auto&& usage1, auto&& usage2) {
+      if(usage1.from_ == usage2.from_) {
+        return usage1.id_ < usage2.id_;
+      }
       return usage1.from_ < usage2.from_;
     });
   });
@@ -192,7 +190,6 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
       // if the .from timestamps for the orderings are equal then we are just
       // betting that we don't introduce a cycle into the ordering graph
       //      utls::sassert(from.from_ != to.from_, "from and to are equal");
-
       nodes_[from.id_].out_.emplace_back(to.id_);
       nodes_[to.id_].in_.emplace_back(from.id_);
     }
