@@ -42,12 +42,15 @@ void fill_by_dfs(ordering_graph const& og, ordering_node::id start_node, std::un
   }
 }
 
-void check_no_transient_edges(ordering_graph const& og) {
+void check_no_transient_edges_and_no_duplicates(ordering_graph const& og) {
   // find all transiently reachable nodes that are reachable from node x but not directly connected
   std::unordered_map<ordering_node::id, std::unordered_map<ordering_node::id, bool>> transiently_reachable_edges_of_node(og.nodes_.size());
   for(auto const& node : og.nodes_) {
+    std::unordered_map<ordering_node::id, bool> edges;
     for(auto const out_id : node.out_) {
       fill_by_dfs(og, out_id, transiently_reachable_edges_of_node[node.id_]);
+      CHECK(!edges[out_id]);
+      edges[out_id] = true;
     }
   }
 
@@ -104,7 +107,7 @@ TEST_SUITE("ordering graph") {
 
     ordering_graph const og(infra, tt);
 
-    check_no_transient_edges(og);
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
 
     // the ordering graph has a node for every {train, interlocking route} pair
@@ -145,7 +148,7 @@ TEST_SUITE("ordering graph") {
     timetable const tt(tt_opts, infra);
     ordering_graph const og(infra, tt);
 
-    check_no_transient_edges(og);
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
   }
 
@@ -166,7 +169,7 @@ TEST_SUITE("ordering graph") {
 
     ordering_graph const og(infra, tt, {.interval_ = inter});
 
-    check_no_transient_edges(og);
+    check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
   }
 }
