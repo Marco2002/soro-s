@@ -4,6 +4,7 @@
 
 #include "range/v3/range/conversion.hpp"
 
+#include "utl/erase_duplicates.h"
 #include "utl/parallel_for.h"
 #include "utl/timer.h"
 
@@ -12,6 +13,7 @@
 #include "soro/utls/std_wrapper/sort.h"
 
 #include "soro/runtime/runtime.h"
+#include "soro/simulation/ordering/compute_transitive_reduction.h"
 
 namespace soro::simulation {
 
@@ -57,9 +59,6 @@ struct route_usage {
 struct usage_data {
   std::vector<std::vector<exclusion_section::id>> used_sections; // the used exclusion sections of each interlocking route
   std::vector<std::vector<route_usage*>> usages; // the usages of each exclusion section (will be ordered by time)
-  std::vector<soro::data::bitvec> reachability_data; // reachability matrix. For each node it stores a bitset of reachable nodes
-  std::vector<unsigned int> number_of_predecessors; // the number of possible predecessors for each node (previous usage of train + previous usage of its exclusion sections)
-  std::vector<unsigned int> number_of_handled_predecessors; // the number of handled predecessors for each node.
 
   route_usage* find_next_usage(section::id const section, ordering_node::id const node_id) {
     auto const& section_usages = usages[section];
@@ -73,25 +72,12 @@ struct usage_data {
 };
 
 void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, usage_data& usage_data) {
-  soro::data::bitvec handled_exclusions;
-  if(nodes[node_id].out_.empty()) {
-    handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
-  } else {
-    auto const next_node = nodes[node_id].out_.front();
-    handled_exclusions = usage_data.reachability_data[next_node];
-    ++usage_data.number_of_handled_predecessors[next_node];
-    if(usage_data.number_of_handled_predecessors[next_node] == usage_data.number_of_predecessors[next_node]) {
-      usage_data.reachability_data[next_node].reset();
-    }
-  }
-  handled_exclusions.set(node_id);
   auto const used_sections = usage_data.used_sections[nodes[node_id].ir_id_];
   std::vector<route_usage*> next_usages;
   for(auto const section : used_sections) {
     auto next_usage = usage_data.find_next_usage(section, node_id);
     if(next_usage != nullptr) {
       next_usages.push_back(next_usage);
-      ++usage_data.number_of_handled_predecessors[next_usage->id_];
     }
   }
 
@@ -102,20 +88,12 @@ void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, us
 
     for(auto const next_usage_ref : next_usages) {
       auto const next_usage = next_usage_ref->id_;
-      if(!handled_exclusions[next_usage]) {
-        nodes[node_id].out_.push_back(next_usage);
-        nodes[next_usage].in_.push_back(node_id);
-
-        handled_exclusions |= usage_data.reachability_data[next_usage];
+      if(!nodes[node_id].out_.empty() && nodes[node_id].out_.back() == next_usage) {
+        continue;
       }
-      if(usage_data.number_of_handled_predecessors[next_usage] == usage_data.number_of_predecessors[next_usage]) {
-        usage_data.reachability_data[next_usage].reset();
-      }
+      nodes[node_id].out_.push_back(next_usage);
+      nodes[next_usage].in_.push_back(node_id);
     }
-  }
-
-  if(usage_data.number_of_predecessors[node_id] != 0) {
-    usage_data.reachability_data[node_id] = handled_exclusions;
   }
 }
 
@@ -145,9 +123,6 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   usage_data usage_data = {
       .used_sections = std::vector<std::vector<exclusion_section::id>>(infra->interlocking_.routes_.size()),
       .usages = std::vector<std::vector<route_usage*>>(infra->exclusion_.exclusion_sections_.size()),
-      .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
-      .number_of_predecessors = std::vector<unsigned int>(total_number_of_nodes),
-      .number_of_handled_predecessors = std::vector<unsigned int>(total_number_of_nodes),
   };
 
   auto const handle_train = [&](auto const& train) {
@@ -168,6 +143,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
               "main signals in running time calculation timestamps");
         });
       }
+
       if (times.empty()) {
         uLOG(utl::warn) << "no main signal in path of train " << train.id_;
         return;
@@ -185,10 +161,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
       for(size_t i = 0; i < train.path_.size(); ++i) {
         std::vector<node::id> in;
         std::vector<node::id> out;
-        if(i > 0) {
-          in.push_back(curr_node_id - 1);
-          ++usage_data.number_of_predecessors[curr_node_id];
-        }
+        if(i > 0) in.push_back(curr_node_id - 1);
         if(i < train.path_.size() - 1) {
           out.push_back(curr_node_id + 1);
         }
@@ -228,9 +201,6 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
                         : usage_data.used_sections[ir.id_];
 
     for(auto section : sections) {
-      if(!usage_data.usages[section].empty()) {
-        ++usage_data.number_of_predecessors[node.id_];
-      }
       usage_data.usages[section].push_back(&usage);
     }
     if(usage_data.used_sections[ir.id_].empty()) {
@@ -242,6 +212,9 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   for(auto const& route_usage : std::ranges::reverse_view(route_usages)) {
     visit_node(route_usage.id_, nodes_, usage_data);
   }
+  print_ordering_graph_stats(*this);
+  timer.print("removing transitive edges");
+  remove_transitive_edges(*this);
 
   print_ordering_graph_stats(*this);
 }

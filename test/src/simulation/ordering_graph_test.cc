@@ -131,6 +131,7 @@ TEST_SUITE("ordering graph") {
     }
 
     // check no transient edges
+    check_ordering_graph(og, infra);
     check_no_transient_edges(og);
   }
 
@@ -171,6 +172,7 @@ TEST_SUITE("ordering graph") {
 
     ordering_graph const og(infra, tt, {.interval_ = inter});
 
+    check_no_transient_edges(og);
     check_ordering_graph(og, infra);
   }
 }
