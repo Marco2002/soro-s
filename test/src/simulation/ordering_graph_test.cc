@@ -164,13 +164,14 @@ TEST_SUITE("ordering graph") {
 
 
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                          .end_ = rep_to_absolute_time(1636786800) + hours{24}};
+                          .end_ = rep_to_absolute_time(1636786800) + hours{1}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);
 
     ordering_graph const og(infra, tt, {.interval_ = inter});
 
+    check_no_transient_edges(og);
     check_ordering_graph(og, infra);
   }
 }
