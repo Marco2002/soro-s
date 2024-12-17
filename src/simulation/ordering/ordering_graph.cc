@@ -97,7 +97,7 @@ void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, us
 
   if(!next_usages.empty()) {
     std::sort(next_usages.begin(), next_usages.end(), [](auto const a, auto const b) {
-      return a->timestamp_ < b->timestamp_;
+      return std::tie(a->timestamp_, a->id_) < std::tie(b->timestamp_, b->id_);
     });
 
     for(auto const next_usage_ref : next_usages) {
@@ -199,7 +199,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
                                              .out_ = out};
 
         route_usages[curr_node_id] = {
-            .timestamp_ = relative_to_absolute(anchor, i == 0 ? train.first_departure() : times[i-1].departure_),
+            .timestamp_ = relative_to_absolute(anchor, i == 0 ? train.first_departure() : times[i-1].arrival_),
             .id_ = curr_node_id};
         ++curr_node_id;
       }
