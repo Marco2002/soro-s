@@ -112,8 +112,6 @@ void compare_graphs(ordering_graph const& og, ordering_graph const& og2) {
         }
       }
     }
-//    CHECK_EQ(node.in_, node2.in_);
-//    CHECK_EQ(node.out_, node2.out_);
   }
 }
 
@@ -128,7 +126,7 @@ TEST_CASE("compare graphs") {
   opts.layout_ = false;
 
   interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                       .end_ = rep_to_absolute_time(1636786800) + hours{1}};
+                       .end_ = rep_to_absolute_time(1636786800) + hours{8}};
 
   infrastructure const infra(opts);
   timetable const tt(tt_opts, infra);
@@ -136,15 +134,6 @@ TEST_CASE("compare graphs") {
   ordering_graph const og(infra, tt, {.interval_ = inter});
   ordering_graph const og2(infra, tt, {.interval_ = inter}, true);
 
-  std::cout << "out" << std::endl;
-  for(auto out : og2.nodes_[23258].out_) {
-    std::cout << out << std::endl;
-  }
-  std::cout << "in" << std::endl;
-  for(auto in : og2.nodes_[23258].in_) {
-    std::cout << in << std::endl;
-  }
-  std::cout << "done" << std::endl;
   compare_graphs(og, og2);
 }
 
