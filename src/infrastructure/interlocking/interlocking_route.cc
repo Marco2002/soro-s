@@ -318,7 +318,7 @@ exclusion_section::ids interlocking_route::get_used_exclusion_sections(infrastru
       if(es.contains_end(last_element->id())) index_of_last = i;
     }
     if(index_of_first == exclusion_sections.size() - 1 &&
-        !infra->exclusion_.exclusion_sections_[exclusion_sections[index_of_first-1]].contains_end(last_element->id())) {
+        !infra->exclusion_.exclusion_sections_[exclusion_sections[index_of_first-1]].contains_end(first_element->id())) {
       ++index_of_first;
     }
     if(index_of_last == exclusion_sections.size() - 1 &&
