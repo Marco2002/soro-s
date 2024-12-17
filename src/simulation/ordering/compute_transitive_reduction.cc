@@ -232,8 +232,18 @@ void remove_transitive_edges(ordering_graph& graph) {
 
   auto queue = sort_edge_tro_plus(graph, to);
 
+  std::map<ordering_node::id, tt::train::trip> node_to_trip;
+  for (auto const& trip : graph.trip_to_nodes_) {
+    for (auto node = trip.second.first; node != trip.second.second; ++node) {
+      node_to_trip[node] = trip.first;
+    }
+  }
   for (auto edge : queue) {
-    if (is_redundant_tro_plus(labeled_graph, edge, to)) {
+    auto const& from_node = *std::get<0>(edge);
+    auto const& to_node = *std::get<1>(edge);
+    if (is_redundant_tro_plus(labeled_graph, edge, to)
+        && !(from_node.id_ == to_node.id_-1 && node_to_trip[from_node.id_] == node_to_trip[to_node.id_])) {
+
       remove_edge(*std::get<0>(edge), *std::get<1>(edge));
     }
   }
