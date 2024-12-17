@@ -54,10 +54,19 @@ std::vector<ordering_edge> get_transitive_edges(ordering_graph const& og) {
 
 void remove_transitive_edges(ordering_graph& og) {
   utl::scoped_timer const timer("removing transitive edges");
+  std::map<ordering_node::id, tt::train::trip> node_to_trip;
 
   auto const transitive_edges = get_transitive_edges(og);
+  for(auto const trip : og.trip_to_nodes_) {
+    for(auto node_id = trip.second.first; node_id < trip.second.second; ++node_id) {
+      node_to_trip[node_id] = trip.first;
+    }
+  }
 
   for (auto const& edge : transitive_edges) {
+    if(node_to_trip[edge.first] == node_to_trip[edge.second] && edge.first == edge.second-1) {
+      continue;
+    }
     utl::erase(og.nodes_[edge.first].out_, edge.second);
     utl::erase(og.nodes_[edge.second].in_, edge.first);
   }
