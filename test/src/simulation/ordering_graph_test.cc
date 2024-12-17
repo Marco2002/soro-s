@@ -42,14 +42,28 @@ void fill_by_dfs(ordering_graph const& og, ordering_node::id start_node, std::un
 }
 
 void check_no_transient_edges_and_no_duplicates(ordering_graph const& og) {
-  // find all transiently reachable nodes that are reachable from node x but not directly connected
   std::unordered_map<ordering_node::id, std::unordered_map<ordering_node::id, bool>> transiently_reachable_edges_of_node(og.nodes_.size());
   for(auto const& node : og.nodes_) {
-    std::unordered_map<ordering_node::id, bool> edges;
-    for(auto const out_id : node.out_) {
-      fill_by_dfs(og, out_id, transiently_reachable_edges_of_node[node.id_]);
-      CHECK(!edges[out_id]);
-      edges[out_id] = true;
+    // find all transiently reachable nodes that are reachable from node x
+    fill_by_dfs(og, node.id_, transiently_reachable_edges_of_node[node.id_]);
+    // assert no duplicate edges
+    std::unordered_map<ordering_node::id, int> freqMap;
+    std::set<int> duplicates;
+    for (const auto& elem : node.out_) {
+      freqMap[elem]++;
+      CHECK(freqMap[elem] == 1);
+    }
+    freqMap.clear();
+    for (const auto& elem : node.in_) {
+      freqMap[elem]++;
+      CHECK(freqMap[elem] == 1);
+    }
+  }
+
+  std::map<ordering_node::id, tt::train::trip> node_to_trip;
+  for (auto trip : og.trip_to_nodes_) {
+    for(auto i = trip.second.first; i < trip.second.second; ++i) {
+      node_to_trip[i] = trip.first;
     }
   }
 
@@ -57,9 +71,10 @@ void check_no_transient_edges_and_no_duplicates(ordering_graph const& og) {
   for(auto const& node : og.nodes_) {
     for(auto const out_id : node.out_) {
       for(auto const reachable_node : transiently_reachable_edges_of_node[out_id]) {
-        if(reachable_node.first != node.id_+1) {
-          CHECK(!utls::contains(node.out_, reachable_node.first));
+        if(reachable_node.first == node.id_+1 && node_to_trip[node.id_] == node_to_trip[reachable_node.first]) {
+          continue;
         }
+        CHECK(!utls::contains(node.out_, reachable_node.first));
       }
     }
   }
