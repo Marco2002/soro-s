@@ -183,7 +183,7 @@ ordering_graph::ordering_graph(infra::infrastructure const& infra,
   utl::parallel_for(orderings, [](auto&& usage_order) {
     utls::sort(usage_order, [](auto&& usage1, auto&& usage2) {
       if(usage1.from_ == usage2.from_) {
-        return usage1.to_ < usage2.to_;
+        return usage1.id_ < usage2.id_;
       }
       return usage1.from_ < usage2.from_;
     });
