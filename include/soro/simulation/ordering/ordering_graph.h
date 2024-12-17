@@ -35,6 +35,9 @@ struct ordering_graph {
   ordering_graph(infra::infrastructure const& infra, tt::timetable const& tt);
   ordering_graph(infra::infrastructure const& infra, tt::timetable const& tt,
                  filter const& filter);
+  ordering_graph(infra::infrastructure const& infra, tt::timetable const& tt, bool og);
+  ordering_graph(infra::infrastructure const& infra, tt::timetable const& tt,
+                 filter const& filter, bool og);
 
   std::span<const ordering_node> trip_nodes(tt::train::trip const trip) const;
 

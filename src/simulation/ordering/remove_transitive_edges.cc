@@ -58,6 +58,9 @@ void remove_transitive_edges(ordering_graph& og) {
   auto const transitive_edges = get_transitive_edges(og);
 
   for (auto const& edge : transitive_edges) {
+    if(og.nodes_[edge.first].train_id_ == og.nodes_[edge.second].train_id_ && og.nodes_[edge.first].id_ == og.nodes_[edge.second].id_-1) {
+      continue;
+    }
     utl::erase(og.nodes_[edge.first].out_, edge.second);
     utl::erase(og.nodes_[edge.second].in_, edge.first);
   }
