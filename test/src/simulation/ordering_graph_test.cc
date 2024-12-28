@@ -1,3 +1,5 @@
+#include <stack>
+
 #include "doctest/doctest.h"
 
 #include "soro/base/time.h"
@@ -9,6 +11,9 @@
 #include "soro/simulation/ordering/ordering_graph.h"
 
 #include "test/file_paths.h"
+#include "utl/timer.h"
+#include "utl/logging.h"
+
 #include <stack>
 
 namespace soro::simulation::test {
@@ -78,6 +83,30 @@ void check_no_transient_edges_and_no_duplicates(ordering_graph const& og) {
       }
     }
   }
+}
+
+void run_evaluation(int const hours_interval, int const sample_size) {
+  auto opts = soro::test::DE_ISS_OPTS;
+  auto tt_opts = soro::test::DE_KSS_OPTS;
+
+  opts.exclusions_ = true;
+  opts.interlocking_ = true;
+  opts.exclusion_graph_ = false;
+  opts.layout_ = false;
+
+  interval const inter{.start_ = rep_to_absolute_time(1636786800),
+                       .end_ = rep_to_absolute_time(1636786800) + hours{hours_interval}};
+
+  infrastructure const infra(opts);
+  timetable const tt(tt_opts, infra);
+
+  auto start = std::chrono::steady_clock::now();
+  for (auto i = 0; i < sample_size; ++i) {
+    ordering_graph const og(infra, tt, {.interval_ = inter});
+  }
+  auto end = std::chrono::steady_clock::now();
+  auto average_time = (end - start) / sample_size;
+  std::cout << "Average time for 1h evaluation: " << duration_cast<std::chrono::microseconds>(average_time).count()/1000.0 << "ms" << std::endl;
 }
 
 void check_ordering_graph(ordering_graph const& og,
@@ -178,7 +207,7 @@ TEST_SUITE("ordering graph") {
     opts.layout_ = false;
 
     interval const inter{.start_ = rep_to_absolute_time(1636786800),
-                         .end_ = rep_to_absolute_time(1636786800) + hours{1}};
+                         .end_ = rep_to_absolute_time(1636786800) + hours{24}};
 
     infrastructure const infra(opts);
     timetable const tt(tt_opts, infra);
@@ -188,6 +217,22 @@ TEST_SUITE("ordering graph") {
     check_no_transient_edges_and_no_duplicates(og);
     check_ordering_graph(og, infra);
   }
+
+  TEST_CASE("1h evaluation") {
+    run_evaluation(1, 10);
+  }
+  TEST_CASE("8h evaluation") {
+    run_evaluation(8, 10);
+  }
+  TEST_CASE("24h evaluation") {
+    run_evaluation(24, 10);
+  }
+  TEST_CASE("full evaluation") {
+    run_evaluation(1, 10);
+    run_evaluation(8, 10);
+    run_evaluation(24, 10);
+  }
+
 }
 
 }  // namespace soro::simulation::test
