@@ -105,7 +105,7 @@ void run_evaluation(int const hours_interval, int const sample_size) {
   }
   auto end = std::chrono::steady_clock::now();
   auto average_time = (end - start) / sample_size;
-  std::cout << "Average time for 1h evaluation: " << duration_cast<std::chrono::microseconds>(average_time).count()/1000.0 << "ms" << std::endl;
+  std::cout << "Average time for " << hours_interval << "h evaluation: " << duration_cast<std::chrono::microseconds>(average_time).count()/1000.0 << "ms" << std::endl;
 }
 
 void check_ordering_graph(ordering_graph const& og,
