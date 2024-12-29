@@ -58,6 +58,7 @@ struct usage_data {
   std::vector<std::vector<exclusion_section::id>> used_sections; // the used exclusion sections of each interlocking route
   std::vector<std::vector<route_usage*>> usages; // the usages of each exclusion section (will be ordered by time)
   std::vector<soro::data::bitvec> reachability_data; // reachability matrix. For each node it stores a bitset of reachable nodes
+  std::vector<unsigned long> node_order_index; // maps node to its index in topological order
   std::vector<unsigned int> number_of_predecessors; // the number of possible predecessors for each node (previous usage of train + previous usage of its exclusion sections)
   std::vector<unsigned int> number_of_handled_predecessors; // the number of handled predecessors for each node.
 
@@ -74,17 +75,20 @@ struct usage_data {
 
 void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, usage_data& usage_data) {
   soro::data::bitvec handled_exclusions;
+  auto const handled_exclusions_size = static_cast<unsigned int>(nodes.size() - usage_data.node_order_index[node_id] );
   if(nodes[node_id].out_.empty()) {
-    handled_exclusions.resize(static_cast<unsigned int>(nodes.size()));
+    handled_exclusions.resize(handled_exclusions_size);
   } else {
     auto const next_node = nodes[node_id].out_.front();
     handled_exclusions = usage_data.reachability_data[next_node];
+    handled_exclusions.resize(handled_exclusions_size);
+    handled_exclusions <<= (usage_data.node_order_index[next_node] - usage_data.node_order_index[node_id]);
     ++usage_data.number_of_handled_predecessors[next_node];
     if(usage_data.number_of_handled_predecessors[next_node] == usage_data.number_of_predecessors[next_node]) {
       usage_data.reachability_data[next_node].reset();
     }
   }
-  handled_exclusions.set(node_id);
+  handled_exclusions.set(0);
   auto const used_sections = usage_data.used_sections[nodes[node_id].ir_id_];
   std::vector<route_usage*> next_usages;
   for(auto const section : used_sections) {
@@ -102,11 +106,16 @@ void visit_node(ordering_node::id node_id, std::vector<ordering_node>& nodes, us
 
     for(auto const next_usage_ref : next_usages) {
       auto const next_usage = next_usage_ref->id_;
-      if(!handled_exclusions[next_usage]) {
+      auto const translated_node_index = static_cast<unsigned int>(usage_data.node_order_index[next_usage] - usage_data.node_order_index[node_id]);
+      if(!handled_exclusions[translated_node_index]) {
         nodes[node_id].out_.push_back(next_usage);
         nodes[next_usage].in_.push_back(node_id);
 
-        handled_exclusions |= usage_data.reachability_data[next_usage];
+        auto other_exclusions = usage_data.reachability_data[next_usage];
+        other_exclusions.resize(handled_exclusions_size);
+        other_exclusions <<= (usage_data.node_order_index[next_usage] - usage_data.node_order_index[node_id]);
+
+        handled_exclusions |= other_exclusions;
       }
       if(usage_data.number_of_handled_predecessors[next_usage] == usage_data.number_of_predecessors[next_usage]) {
         usage_data.reachability_data[next_usage].reset();
@@ -146,6 +155,7 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
       .used_sections = std::vector<std::vector<exclusion_section::id>>(infra->interlocking_.routes_.size()),
       .usages = std::vector<std::vector<route_usage*>>(infra->exclusion_.exclusion_sections_.size()),
       .reachability_data = std::vector<soro::data::bitvec>(total_number_of_nodes),
+      .node_order_index = std::vector<unsigned long>(total_number_of_nodes),
       .number_of_predecessors = std::vector<unsigned int>(total_number_of_nodes),
       .number_of_handled_predecessors = std::vector<unsigned int>(total_number_of_nodes),
   };
@@ -239,8 +249,11 @@ ordering_graph::ordering_graph(const infra::infrastructure& infra,
   }
 
   // start adding edges between train trips by searching backwards though ordering nodes
-  for(auto const& route_usage : std::ranges::reverse_view(route_usages)) {
+  unsigned long order_index = nodes_.size() - 1;
+  for(auto & route_usage : std::ranges::reverse_view(route_usages)) {
+    usage_data.node_order_index[route_usage.id_] = order_index;
     visit_node(route_usage.id_, nodes_, usage_data);
+    --order_index;
   }
 
   print_ordering_graph_stats(*this);
